@@ -403,8 +403,28 @@ def open_file_external(file_path):
     except Exception as e: 
         st.error(f"Error opening file: {e}")
 
+def is_headless_environment():
+    """Check if running in a headless environment (no display)"""
+    # Check for common headless indicators
+    if os.environ.get('CODESPACES') == 'true':
+        return True
+    if os.environ.get('GITPOD_WORKSPACE_ID'):
+        return True
+    if not os.environ.get('DISPLAY') and platform.system() != 'Windows':
+        return True
+    # Check if running in Docker
+    if os.path.exists('/.dockerenv'):
+        return True
+    return False
+
 def select_folder_dialog(initial_dir=None):
     """Open folder selection dialog using tkinter - thread-safe version"""
+    
+    # Check for headless environment first
+    if is_headless_environment():
+        st.info("💡 **Tip:** ระบบนี้ทำงานบน Cloud/Server ไม่รองรับ Folder Dialog\n\n👉 กรุณาพิมพ์ path โดยตรงในช่อง input แทน\n\nตัวอย่าง: `/home/vscode/ocr/source`")
+        return None
+    
     result_queue = queue.Queue()
     error_queue = queue.Queue()
 
@@ -440,7 +460,11 @@ def select_folder_dialog(initial_dir=None):
         # Check for errors
         try:
             error = error_queue.get_nowait()
-            st.error(f"Error selecting folder: {error}")
+            # Show friendly message instead of error for display issues
+            if "display" in error.lower() or "DISPLAY" in error:
+                st.info("💡 **Tip:** Folder picker ใช้ไม่ได้บน Server\n\n👉 กรุณาพิมพ์ path โดยตรงในช่อง input แทน")
+            else:
+                st.error(f"Error selecting folder: {error}")
             return None
         except queue.Empty:
             pass
@@ -453,7 +477,11 @@ def select_folder_dialog(initial_dir=None):
         st.warning("⚠️ Could not get folder selection result. Please enter path manually.")
         return None
     except Exception as e:
-        st.error(f"Error selecting folder: {e}")
+        error_msg = str(e)
+        if "display" in error_msg.lower() or "DISPLAY" in error_msg:
+            st.info("💡 **Tip:** Folder picker ใช้ไม่ได้บน Server\n\n👉 กรุณาพิมพ์ path โดยตรงในช่อง input แทน")
+        else:
+            st.error(f"Error selecting folder: {e}")
         return None
 
 def get_files_in_folder(folder_path):
