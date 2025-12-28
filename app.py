@@ -2806,15 +2806,33 @@ def render_page_2():
             # Toolbar [Sheet] [Gen SAP] [Detail+Nav] [Reset] [Save] [Reload Vendor]
             c_sheet, c_gen, c_detail, c_reset, c_save, c_reload = st.columns([0.20, 0.15, 0.20, 0.12, 0.12, 0.12])
             with c_sheet:
+                # รองรับทั้ง uploaded file และ loaded from path
                 file_ref = st.session_state.uploaded_file_ref
-                sheet_names = get_sheet_names_fresh(file_ref)
+                file_path = st.session_state.get('loaded_file_path')
+                
+                # ดึงรายชื่อ sheet
+                if file_ref:
+                    sheet_names = get_sheet_names_fresh(file_ref)
+                elif file_path and os.path.exists(file_path):
+                    sheet_names = pd.ExcelFile(file_path).sheet_names
+                else:
+                    sheet_names = [st.session_state.current_sheet] if st.session_state.current_sheet else ["Sheet1"]
+                
                 curr = st.session_state.current_sheet
                 idx = sheet_names.index(curr) if curr in sheet_names else 0
                 new_sheet = st.selectbox("Sheet", sheet_names, index=idx, label_visibility="collapsed")
                 if new_sheet != curr:
                     st.session_state.current_sheet = new_sheet
-                    file_ref.seek(0)
-                    df = pd.read_excel(file_ref, sheet_name=new_sheet, engine='openpyxl', dtype=str)
+                    # อ่านจาก file_ref หรือ file_path
+                    if file_ref:
+                        file_ref.seek(0)
+                        df = pd.read_excel(file_ref, sheet_name=new_sheet, engine='openpyxl', dtype=str)
+                    elif file_path and os.path.exists(file_path):
+                        df = pd.read_excel(file_path, sheet_name=new_sheet, engine='openpyxl', dtype=str)
+                    else:
+                        st.error("ไม่พบไฟล์ที่จะอ่าน")
+                        df = st.session_state.df_data
+                    
                     df = df.replace('nan', '')
                     if "_chk" not in df.columns: 
                         df.insert(0, "_chk", False)
