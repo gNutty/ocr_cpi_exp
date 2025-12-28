@@ -3160,8 +3160,12 @@ def render_page_2():
                     if st.session_state.selected_row_idx is not None and st.session_state.df_data is not None:
                         temp_row = st.session_state.df_data.iloc[st.session_state.selected_row_idx]
                         temp_links = []
-                        if st.session_state.uploaded_file_ref is not None and st.session_state.current_sheet is not None:
-                            temp_links = extract_hyperlinks(st.session_state.uploaded_file_ref, st.session_state.current_sheet)
+                        # รองรับทั้ง uploaded file และ loaded from path
+                        temp_file_source = st.session_state.uploaded_file_ref
+                        if temp_file_source is None:
+                            temp_file_source = st.session_state.get('loaded_file_path')
+                        if temp_file_source is not None and st.session_state.current_sheet is not None:
+                            temp_links = extract_hyperlinks(temp_file_source, st.session_state.current_sheet)
                         if st.session_state.selected_row_idx < len(temp_links):
                             for k, v in temp_links[st.session_state.selected_row_idx].items():
                                 # v is now a dict with 'target' and 'display' keys
@@ -3302,8 +3306,13 @@ def render_page_2():
         
         # Method 1: Try to extract from hyperlinks first
         links = []
-        if st.session_state.uploaded_file_ref is not None and st.session_state.current_sheet is not None:
-            links = extract_hyperlinks(st.session_state.uploaded_file_ref, st.session_state.current_sheet)
+        # รองรับทั้ง uploaded file และ loaded from path
+        file_source = st.session_state.uploaded_file_ref
+        if file_source is None:
+            file_source = st.session_state.get('loaded_file_path')
+        
+        if file_source is not None and st.session_state.current_sheet is not None:
+            links = extract_hyperlinks(file_source, st.session_state.current_sheet)
             if st.session_state.selected_row_idx < len(links):
                 for k, v in links[st.session_state.selected_row_idx].items():
                     # v is now a dict with 'target' and 'display' keys
@@ -3542,8 +3551,12 @@ def render_page_2():
                     if "filename" in cols_lower:
                         fname_col = st.session_state.df_data.columns[cols_lower.index("filename")]
                         st.write(f"Filename column value: {row[fname_col]}")
-                    if st.session_state.uploaded_file_ref is not None:
-                        links = extract_hyperlinks(st.session_state.uploaded_file_ref, st.session_state.current_sheet)
+                    # รองรับทั้ง uploaded file และ loaded from path
+                    debug_file_source = st.session_state.uploaded_file_ref
+                    if debug_file_source is None:
+                        debug_file_source = st.session_state.get('loaded_file_path')
+                    if debug_file_source is not None:
+                        links = extract_hyperlinks(debug_file_source, st.session_state.current_sheet)
                         if st.session_state.selected_row_idx < len(links):
                             st.write("Hyperlinks found:", links[st.session_state.selected_row_idx])
                         else:
