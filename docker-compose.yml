@@ -1,0 +1,57 @@
+# Docker Compose for AI OCR & Document Editor
+# Usage: docker-compose up -d
+
+version: '3.8'
+
+services:
+  ocr-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocr-app
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount source and output directories
+      - ./source:/app/source
+      - ./output:/app/output
+      # Mount vendor master file (optional, already copied in Dockerfile)
+      # - ./Vendor_branch.xlsx:/app/Vendor_branch.xlsx:ro
+    environment:
+      - TYPHOON_API_KEY=${TYPHOON_API_KEY:-}
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_HEADLESS=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Ollama for local OCR processing
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # Uncomment for GPU support (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ollama_data:
+
+networks:
+  default:
+    name: ocr-network
+
+

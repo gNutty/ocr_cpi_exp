@@ -1,0 +1,38 @@
+# ===========================================
+# Python Dependencies for OCR Application
+# ===========================================
+# Tested on Python 3.9, 3.10, 3.11, 3.12
+
+# --- Core Web Framework ---
+streamlit>=1.28.0
+
+# --- Data Processing ---
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# --- HTTP Client ---
+requests>=2.31.0
+
+# --- PDF Processing ---
+pypdf>=3.17.0
+pdf2image>=1.16.3
+PyMuPDF>=1.23.0
+
+# --- Image Processing ---
+Pillow>=10.0.0
+
+# --- OCR ---
+pytesseract>=0.3.10
+
+# --- Streamlit Extensions ---
+streamlit-pdf-viewer>=0.0.15
+
+# --- Development (Optional) ---
+# Uncomment for development/testing
+# flake8>=6.0.0
+# black>=23.0.0
+# isort>=5.12.0
+# pytest>=7.0.0
+
+# --- Environment Variables ---
+# python-dotenv>=1.0.0  # Uncomment if using .env files

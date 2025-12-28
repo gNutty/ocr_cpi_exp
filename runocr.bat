@@ -1,0 +1,1 @@
+python Extract_Inv.py %1 %2 %3

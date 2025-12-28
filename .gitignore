@@ -1,0 +1,88 @@
+# ===========================================
+# Git Ignore for OCR Application
+# ===========================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual Environment ---
+venv/
+ENV/
+env/
+.venv/
+
+# --- IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+config.json
+*.key
+*.pem
+
+# --- OS Generated ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Application ---
+# Output files (optional - remove if you want to track output)
+output/
+*.xlsx
+!Vendor_branch.xlsx
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# --- Streamlit ---
+.streamlit/secrets.toml
+
+# --- Testing ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# --- Backup files ---
+Backup/
+*.bak
+*.backup
+
+

@@ -1,0 +1,55 @@
+# Docker ignore file
+# These files will not be copied into the Docker image
+
+# Git
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment & Secrets
+.env
+.env.local
+config.json
+
+# OS Generated
+.DS_Store
+Thumbs.db
+
+# Backup files
+Backup/
+*.bak
+*.backup
+
+# Output (will be mounted as volume)
+output/
+
+# Documentation
+*.md
+!README.md
+
+# GitHub
+.github/
+
+# Docker files (no need to copy these inside)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+
