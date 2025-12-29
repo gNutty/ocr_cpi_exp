@@ -1,14 +1,6 @@
-# System packages for Streamlit Cloud deployment
-# These are installed with apt-get on Linux
-
-# PDF Processing
 poppler-utils
-
-# OCR
 tesseract-ocr
 tesseract-ocr-tha
 tesseract-ocr-eng
-
-# Image processing dependencies
 libgl1-mesa-glx
 libglib2.0-0
