@@ -11,9 +11,17 @@ import time
 import json
 import threading
 import queue
-import tkinter as tk
-from tkinter import filedialog
-from datetime import datetime 
+from datetime import datetime
+
+# Conditional import for tkinter (not available on Streamlit Cloud/headless environments)
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+    HAS_TKINTER = True
+except ImportError:
+    HAS_TKINTER = False
+    tk = None
+    filedialog = None 
 
 # --- Library เสริม (streamlit-pdf-viewer) ---
 try:
@@ -424,6 +432,11 @@ def is_headless_environment():
 def select_folder_dialog(initial_dir=None):
     """Open folder selection dialog using tkinter - thread-safe version"""
     
+    # Check if tkinter is available
+    if not HAS_TKINTER:
+        st.info("💡 **Tip:** ระบบนี้ทำงานบน Cloud/Server ไม่รองรับ Folder Dialog\n\n👉 กรุณาพิมพ์ path โดยตรงในช่อง input แทน\n\nตัวอย่าง: `/home/vscode/ocr/source`")
+        return None
+    
     # Check for headless environment first
     if is_headless_environment():
         st.info("💡 **Tip:** ระบบนี้ทำงานบน Cloud/Server ไม่รองรับ Folder Dialog\n\n👉 กรุณาพิมพ์ path โดยตรงในช่อง input แทน\n\nตัวอย่าง: `/home/vscode/ocr/source`")
@@ -513,6 +526,10 @@ def save_excel_local(df, default_name, start_path, header=True):
 
     def _run_save_dialog():
         """Run tkinter save dialog in a separate thread"""
+        if not HAS_TKINTER:
+            result_queue.put(None)
+            error_queue.put("tkinter not available on this platform")
+            return
         try:
             root = tk.Tk()
             root.withdraw()
@@ -530,29 +547,13 @@ def save_excel_local(df, default_name, start_path, header=True):
             error_queue.put(str(e))
             result_queue.put(None)
 
-    try:
-        # 1) เปิด Save As dialog
-        dialog_thread = threading.Thread(target=_run_save_dialog, daemon=True)
-        dialog_thread.start()
-        dialog_thread.join(timeout=30)  # รอสูงสุด 30 วินาที
-
-        if dialog_thread.is_alive():
-            return False, "Save dialog timed out. Please try again."
-
-        # ตรวจสอบ error
+    # Check if tkinter is available
+    if not HAS_TKINTER:
+        # On Streamlit Cloud, save directly to default path
+        file_path = os.path.join(start_path if start_path and os.path.exists(start_path) else os.getcwd(), default_name)
+        # Continue with save logic (skip dialog)
         try:
-            error = error_queue.get_nowait()
-            return False, f"Error: {error}"
-        except queue.Empty:
-            pass
-
-        # ดึง path ที่ผู้ใช้เลือก
-        file_path = result_queue.get(timeout=1)
-        if not file_path:
-            return False, "Cancelled"
-
-        # 2) ถ้าเป็นงาน Gen SAP (header=False) -> ใช้วิธีเดิม
-        if not header:
+            if not header:
             try:
                 df_save = df.drop(columns=["_chk"], errors='ignore')
             except Exception:
@@ -706,9 +707,6 @@ def save_excel_local(df, default_name, start_path, header=True):
         # บันทึก workbook ไปยังไฟล์ใหม่
         wb.save(file_path)
         return True, file_path
-
-    except queue.Empty:
-        return False, "Could not get save dialog result. Please try again."
     except Exception as e:
         return False, f"Error saving file: {e}"
 
@@ -727,6 +725,10 @@ def save_txt_local(df, default_name, start_path, delimiter='\t'):
 
     def _run_save_dialog():
         """Run tkinter save dialog in a separate thread"""
+        if not HAS_TKINTER:
+            result_queue.put(None)
+            error_queue.put("tkinter not available on this platform")
+            return
         try:
             root = tk.Tk()
             root.withdraw()
@@ -744,26 +746,37 @@ def save_txt_local(df, default_name, start_path, delimiter='\t'):
             error_queue.put(str(e))
             result_queue.put(None)
 
-    try:
-        # 1) เปิด Save As dialog
-        dialog_thread = threading.Thread(target=_run_save_dialog, daemon=True)
-        dialog_thread.start()
-        dialog_thread.join(timeout=30)  # รอสูงสุด 30 วินาที
-
-        if dialog_thread.is_alive():
-            return False, "Save dialog timed out. Please try again."
-
-        # ตรวจสอบ error
+    # Check if tkinter is available
+    if not HAS_TKINTER:
+        # On Streamlit Cloud, save directly to default path (skip dialog)
+        file_path = os.path.join(start_path if start_path and os.path.exists(start_path) else os.getcwd(), default_name)
+    else:
         try:
-            error = error_queue.get_nowait()
-            return False, f"Error: {error}"
-        except queue.Empty:
-            pass
+            # 1) เปิด Save As dialog
+            dialog_thread = threading.Thread(target=_run_save_dialog, daemon=True)
+            dialog_thread.start()
+            dialog_thread.join(timeout=30)  # รอสูงสุด 30 วินาที
 
-        # ดึง path ที่ผู้ใช้เลือก
-        file_path = result_queue.get(timeout=1)
-        if not file_path:
-            return False, "Cancelled"
+            if dialog_thread.is_alive():
+                return False, "Save dialog timed out. Please try again."
+
+            # ตรวจสอบ error
+            try:
+                error = error_queue.get_nowait()
+                return False, f"Error: {error}"
+            except queue.Empty:
+                pass
+
+            # ดึง path ที่ผู้ใช้เลือก
+            file_path = result_queue.get(timeout=1)
+            if not file_path:
+                return False, "Cancelled"
+        except queue.Empty:
+            return False, "Could not get save dialog result. Please try again."
+        except Exception as e:
+            return False, f"Error: {e}"
+
+    # 2) บันทึกไฟล์
 
         # 2) บันทึก DataFrame เป็นไฟล์ .txt
         try:
