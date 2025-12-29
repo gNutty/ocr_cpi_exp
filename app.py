@@ -2519,22 +2519,19 @@ def render_page_1():
                         
                         # ตรวจสอบว่าเลือก AI OCR แบบไหน
                         if st.session_state.ocr_type == "API Typhoon":
-                            # เลือก script ตาม OS (Cross-platform)
-                            if platform.system() == 'Windows':
-                                script_file = os.path.join(os.getcwd(), "runocr.bat")
-                                cmd = [script_file, source_path, output_path, page_config]
-                            else:
-                                script_file = os.path.join(os.getcwd(), "runocr.sh")
-                                cmd = ["bash", script_file, source_path, output_path, page_config]
+                            # ใช้ sys.executable เพื่อให้ใช้ Python environment เดียวกับ Streamlit
+                            python_script = os.path.join(os.getcwd(), "Extract_Inv.py")
                             
-                            if os.path.exists(script_file):
+                            if os.path.exists(python_script):
+                                # ใช้ sys.executable เพื่อให้ใช้ Python ที่ติดตั้ง packages แล้ว
+                                cmd = [sys.executable, python_script, source_path, output_path, page_config]
+                                
                                 with st.spinner("Running API Typhoon OCR..."):
                                     result = subprocess.run(
                                         cmd,
                                         cwd=os.getcwd(),
                                         capture_output=True,
-                                        text=True,
-                                        shell=(platform.system() == 'Windows')
+                                        text=True
                                     )
                                 
                                 # แสดง output เพื่อ debug
@@ -2552,17 +2549,15 @@ def render_page_1():
                                         st.error("Error details:")
                                         st.code(result.stderr, language="text")
                             else:
-                                st.error(f"OCR script not found at: {script_file}")
+                                st.error(f"OCR script not found at: {python_script}")
                         else:
-                            # เลือก script ตาม OS (Cross-platform) - Local OCR
-                            if platform.system() == 'Windows':
-                                script_file = os.path.join(os.getcwd(), "runocr_local.bat")
-                                cmd = [script_file, source_path, output_path, page_config]
-                            else:
-                                script_file = os.path.join(os.getcwd(), "runocr_local.sh")
-                                cmd = ["bash", script_file, source_path, output_path, page_config]
+                            # Local OCR - ใช้ sys.executable เพื่อให้ใช้ Python environment เดียวกับ Streamlit
+                            python_script = os.path.join(os.getcwd(), "Extract_Inv_local.py")
                             
-                            if os.path.exists(script_file):
+                            if os.path.exists(python_script):
+                                # ใช้ sys.executable เพื่อให้ใช้ Python ที่ติดตั้ง packages แล้ว
+                                cmd = [sys.executable, python_script, source_path, output_path, page_config]
+                                
                                 # แสดง spinner และรัน process
                                 spinner_placeholder = st.empty()
                                 with spinner_placeholder.container():
@@ -2571,8 +2566,7 @@ def render_page_1():
                                             cmd,
                                             cwd=os.getcwd(),
                                             capture_output=True,
-                                            text=True,
-                                            shell=(platform.system() == 'Windows')
+                                            text=True
                                         )
                                 
                                 # ลบ spinner หลังจาก process เสร็จ
@@ -2596,7 +2590,7 @@ def render_page_1():
                                     if result.stdout:
                                         st.warning("Check output above for details")
                             else:
-                                st.error(f"OCR script not found at: {script_file}")
+                                st.error(f"OCR script not found at: {python_script}")
                     except Exception as e:
                         st.error(f"Error running OCR: {e}")
         
