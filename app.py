@@ -2764,6 +2764,14 @@ def render_page_2():
                     st.markdown("<div style='padding-top: 1.5rem;'></div>", unsafe_allow_html=True)
                     load_from_path = st.button("📂 Load", use_container_width=True, help="โหลดรายการไฟล์จาก path")
                 
+                # สร้างโฟลเดอร์ถ้ายังไม่มี
+                if base_folder and not os.path.exists(base_folder):
+                    try:
+                        os.makedirs(base_folder, exist_ok=True)
+                        st.success(f"✅ สร้างโฟลเดอร์แล้ว: {base_folder}")
+                    except Exception as e:
+                        st.error(f"❌ ไม่สามารถสร้างโฟลเดอร์ได้: {e}")
+                
                 # แสดงรายการไฟล์ Excel ใน folder
                 if base_folder and os.path.exists(base_folder):
                     excel_files = [f for f in os.listdir(base_folder) if f.lower().endswith(('.xlsx', '.xls'))]
@@ -2804,9 +2812,9 @@ def render_page_2():
                                     except Exception as e:
                                         st.error(f"❌ Error loading file: {e}")
                     else:
-                        st.info("📭 ไม่พบไฟล์ Excel ใน folder นี้")
+                        st.info("📭 ไม่พบไฟล์ Excel ใน folder นี้\n\n💡 **Tip:** Run OCR ก่อนเพื่อสร้างไฟล์ Excel หรือ Upload ไฟล์ Excel ผ่านปุ่มด้านล่าง")
                 elif base_folder:
-                    st.warning(f"⚠️ Path ไม่มีอยู่: {base_folder}")
+                    st.warning(f"⚠️ Path ไม่มีอยู่: {base_folder}\n\n💡 **Tip:** พิมพ์ path ที่ถูกต้อง เช่น `/mount/src/view_ocr` หรือ `/mount/src/view_ocr/output`")
             
             st.markdown("---")
             st.markdown("**หรือ Upload ไฟล์:**")
