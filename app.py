@@ -12,6 +12,7 @@ import time
 import json
 import threading
 import queue
+import zipfile
 from datetime import datetime
 
 # Conditional import for tkinter (not available on Streamlit Cloud/headless environments)
@@ -531,6 +532,29 @@ def get_files_in_folder(folder_path):
     except Exception as e:
         st.error(f"Error reading folder: {e}")
         return []
+
+def create_zip_from_folder(folder_path):
+    """Create a ZIP file from all files in a folder and return as bytes"""
+    if not folder_path or not os.path.exists(folder_path):
+        return None
+    
+    try:
+        output_files = get_files_in_folder(folder_path)
+        if not output_files:
+            return None
+        
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for file in output_files:
+                file_path = os.path.join(folder_path, file)
+                if os.path.isfile(file_path):
+                    zip_file.write(file_path, file)
+        
+        zip_buffer.seek(0)
+        return zip_buffer.getvalue()
+    except Exception as e:
+        st.error(f"Error creating ZIP file: {e}")
+        return None
 
 def save_excel_local(df, default_name, start_path, header=True):
     """
@@ -2729,7 +2753,7 @@ def render_page_1():
                 except Exception as e:
                     st.warning(f"⚠️ Could not create output directory: {e}")
         
-        col_spacer_right, col_btn4, col_btn5, col_btn6 = st.columns([0.5, 0.17, 0.17, 0.16])
+        col_spacer_right, col_btn4, col_btn5, col_btn6, col_btn7 = st.columns([0.4, 0.15, 0.15, 0.15, 0.15])
         
         with col_btn4:
             if st.button("📂", use_container_width=True, help="Browse Output Folder (may not work in some environments)"):
@@ -2740,6 +2764,23 @@ def render_page_1():
                     st.rerun()
         
         with col_btn5:
+            # Download All Files button
+            if st.session_state.ocr_output_folder and os.path.exists(st.session_state.ocr_output_folder):
+                output_files = get_files_in_folder(st.session_state.ocr_output_folder)
+                if output_files:
+                    zip_data = create_zip_from_folder(st.session_state.ocr_output_folder)
+                    if zip_data:
+                        zip_filename = f"output_files_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                        st.download_button(
+                            "📥",
+                            data=zip_data,
+                            file_name=zip_filename,
+                            mime="application/zip",
+                            use_container_width=True,
+                            help="Download All Output Files as ZIP"
+                        )
+        
+        with col_btn6:
             if st.button("🗑️", use_container_width=True, help="Delete All Output Files", type="secondary"):
                 if st.session_state.ocr_output_folder and os.path.exists(st.session_state.ocr_output_folder):
                     output_files = get_files_in_folder(st.session_state.ocr_output_folder)
@@ -2751,7 +2792,7 @@ def render_page_1():
                 else:
                     st.warning("Output folder does not exist or not set")
         
-        with col_btn6:
+        with col_btn7:
             if st.button("🔃", use_container_width=True, help="Refresh Output List"):
                 st.session_state.ocr_file_list_refresh += 1
                 st.rerun()
@@ -2814,12 +2855,44 @@ def render_page_1():
     
     # Right Column - Output Files
     with col_output:
+        st.markdown("**📁 Output Files**")
         # Output files list
         if os.path.exists(st.session_state.ocr_output_folder):
             output_files = get_files_in_folder(st.session_state.ocr_output_folder)
             if output_files:
                 for file in output_files:
-                    st.text(f"📄 {file}")
+                    file_path = os.path.join(st.session_state.ocr_output_folder, file)
+                    if os.path.isfile(file_path):
+                        col_file, col_download = st.columns([0.8, 0.2], gap="small")
+                        with col_file:
+                            st.text(f"📄 {file}")
+                        with col_download:
+                            try:
+                                with open(file_path, 'rb') as f:
+                                    file_data = f.read()
+                                # Determine MIME type based on file extension
+                                if file.lower().endswith('.txt'):
+                                    mime_type = 'text/plain'
+                                elif file.lower().endswith('.xlsx'):
+                                    mime_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                                elif file.lower().endswith('.xls'):
+                                    mime_type = 'application/vnd.ms-excel'
+                                elif file.lower().endswith('.pdf'):
+                                    mime_type = 'application/pdf'
+                                else:
+                                    mime_type = 'application/octet-stream'
+                                
+                                st.download_button(
+                                    "📥",
+                                    data=file_data,
+                                    file_name=file,
+                                    mime=mime_type,
+                                    key=f"download_{file}_{st.session_state.ocr_file_list_refresh}",
+                                    use_container_width=True,
+                                    help=f"Download {file}"
+                                )
+                            except Exception as e:
+                                st.error(f"Error reading file: {e}")
             else:
                 st.info("No files found in output folder")
         else:
