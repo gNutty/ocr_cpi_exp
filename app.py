@@ -2726,6 +2726,8 @@ def render_page_1():
                 if saved_count > 0:
                     st.success(f"✅ Saved {saved_count} PDF file(s) to: {st.session_state.ocr_source_folder}")
                     st.session_state.ocr_file_list_refresh += 1
+                    # Clear uploader state to prevent infinite loop
+                    st.session_state["pdf_uploader_ocr"] = None
                     time.sleep(1)
                     st.rerun()
     
