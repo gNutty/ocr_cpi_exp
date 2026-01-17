@@ -1412,7 +1412,19 @@ def find_text_bbox_in_pdf(pdf_path, search_text, page_num, field_name=None):
                                             break
                 else:
                     # สำหรับ fields อื่นๆ ใช้วิธีเดิม
-                    exact_match_clean = re.search(re.escape(search_clean_html), ocr_text_clean, re.IGNORECASE)
+                    # Improved: ถ้า search string เป็นตัวเลขล้วน ให้หาแบบ flexible (ยอมให้มี separator)
+                    is_numeric_search = re.match(r'^\d+$', search_clean_html)
+                    exact_match_clean = None
+                    
+                    if is_numeric_search and len(search_clean_html) > 5:
+                        # สร้าง pattern ที่ยอมให้มี non-digit คั่นกลางได้
+                        # e.g. "012" -> "0\D*1\D*2"
+                        flexible_pattern = r'\D*'.join(list(search_clean_html))
+                        exact_match_clean = re.search(flexible_pattern, ocr_text_clean, re.IGNORECASE)
+                    
+                    if not exact_match_clean:
+                        exact_match_clean = re.search(re.escape(search_clean_html), ocr_text_clean, re.IGNORECASE)
+
                     if exact_match_clean:
                         found_match = exact_match_clean
                         match_quality = 3
@@ -2704,12 +2716,12 @@ def render_page_1():
         # PDF File Uploader - สำหรับ upload PDF ไปยัง source folder (อยู่หลังปุ่ม)
         if st.session_state.ocr_source_folder and os.path.exists(st.session_state.ocr_source_folder):
             st.markdown("---")
-            st.markdown("**📤 Upload PDF Files:**")
+            st.markdown("**📤 Upload Files (PDF/Image):**")
             uploaded_pdfs = st.file_uploader(
-                "📄 Upload PDF Files to Source Folder",
-                type=['pdf'],
+                "📄 Upload PDF or Image Files to Source Folder",
+                type=['pdf', 'png', 'jpg', 'jpeg'],
                 accept_multiple_files=True,
-                help=f"Upload PDF files to: {st.session_state.ocr_source_folder}",
+                help=f"Upload files to: {st.session_state.ocr_source_folder}",
                 key=f"pdf_uploader_ocr_{st.session_state.uploader_key}"
             )
             
@@ -2726,7 +2738,7 @@ def render_page_1():
                         st.error(f"❌ Error saving {uploaded_file.name}: {e}")
                 
                 if saved_count > 0:
-                    st.success(f"✅ Saved {saved_count} PDF file(s) to: {st.session_state.ocr_source_folder}")
+                    st.success(f"✅ Saved {saved_count} file(s) to: {st.session_state.ocr_source_folder}")
                     st.session_state.ocr_file_list_refresh += 1
                     # Clear uploader state to prevent infinite loop
                     st.session_state.uploader_key += 1
@@ -2979,7 +2991,8 @@ def render_page_2():
                                         # Ensure columns exist
                                         if not find_column_name(df.columns, ["vendor", "code"]): 
                                             df["Vendor code"] = ""
-                                        if not find_column_name(df.columns, ["vendor", "name"]): 
+                                        # Only create Vendor Name if "ชื่อบริษัท" (Thai Name) or similar doesn't exist
+                                        if not find_column_name(df.columns, ["ชื่อบริษัท"]) and not find_column_name(df.columns, ["vendor", "name"]): 
                                             df["Vendor Name"] = ""
                                         
                                         # เก็บ path ของไฟล์ที่เปิด
@@ -3028,7 +3041,8 @@ def render_page_2():
                 # Ensure columns exist
                 if not find_column_name(df.columns, ["vendor", "code"]): 
                     df["Vendor code"] = ""
-                if not find_column_name(df.columns, ["vendor", "name"]): 
+                # Only create Vendor Name if "ชื่อบริษัท" or similar doesn't exist
+                if not find_column_name(df.columns, ["ชื่อบริษัท"]) and not find_column_name(df.columns, ["vendor", "name"]): 
                     df["Vendor Name"] = ""
 
                 st.session_state.df_data = df
@@ -3075,7 +3089,8 @@ def render_page_2():
                         df["_chk"] = df["_chk"].astype(bool)
                     if not find_column_name(df.columns, ["vendor", "code"]): 
                         df["Vendor code"] = ""
-                    if not find_column_name(df.columns, ["vendor", "name"]): 
+                    # Only create Vendor Name if "ชื่อบริษัท" doesn't exist
+                    if not find_column_name(df.columns, ["ชื่อบริษัท"]) and not find_column_name(df.columns, ["vendor", "name"]): 
                         df["Vendor Name"] = ""
                     st.session_state.df_data = df
                     st.session_state.data_version += 1  # Force refresh
@@ -3153,10 +3168,80 @@ def render_page_2():
                             st.error(f"บันทึกไม่สำเร็จ: {msg}")
             
             with c_reload:
-                if st.button("🔄 Vendor", help="Reload Vendor Master", use_container_width=True):
+                if st.button("🔄 Vendor", help="Reload Vendor Master & Lookup", use_container_width=True):
+                    # 1. Reload Master
                     master = load_vendor_master(force_reload=True)
                     if master is not None:
                         st.toast(f"✅ Reload Vendor Master สำเร็จ ({len(master)} rows)", icon="✅")
+                        
+                        # 2. Perform Lookup for all rows
+                        if 'df_data' in st.session_state and st.session_state.df_data is not None:
+                            df = st.session_state.df_data
+                            df_cols = df.columns
+                            
+                            # Find columns
+                            # VendorID_OCR
+                            col_vid = None
+                            for pattern in [["vendor", "id"], ["vendorid"], ["vendor", "ocr"]]:
+                                col_vid = find_column_name(df_cols, pattern)
+                                if col_vid: break
+                            if not col_vid:
+                                for col in df_cols:
+                                    if "vendorid" in str(col).lower() or ("vendor" in str(col).lower() and "id" in str(col).lower()):
+                                        col_vid = col; break
+                            col_vid = col_vid or "VendorID_OCR"
+                            
+                            # Branch_OCR
+                            col_branch = None
+                            for pattern in [["branch"]]:
+                                col_branch = find_column_name(df_cols, pattern)
+                                if col_branch: break
+                            if not col_branch:
+                                for col in df_cols:
+                                    if "branch" in str(col).lower() and "ocr" in str(col).lower():
+                                        col_branch = col; break
+                            col_branch = col_branch or ("Branch_OCR" if "Branch_OCR" in df_cols else "BranchOCR")
+                            
+                            col_vcode = find_column_name(df_cols, ["vendor", "code"]) or "Vendor code"
+                            # Make sure we map to "ชื่อบริษัท" if it exists
+                            col_vname = find_column_name(df_cols, ["ชื่อบริษัท"]) or find_column_name(df_cols, ["vendor", "name"]) or "Vendor Name"
+                            
+                            updated_count = 0
+                            
+                            # Iterate and Lookup
+                            for idx in df.index:
+                                v_id = df.at[idx, col_vid] if col_vid in df.columns else None
+                                br = df.at[idx, col_branch] if col_branch in df.columns else None
+                                
+                                # Clean data before lookup
+                                v_id_str = str(v_id).strip() if pd.notna(v_id) and v_id else ""
+                                if v_id_str.lower() == 'nan': v_id_str = ""
+                                
+                                br_str = str(br).strip() if pd.notna(br) and br else ""
+                                if br_str.lower() == 'nan': br_str = ""
+                                if not br_str: br_str = "00000" # Default to Head Office if missing
+                                
+                                if v_id_str:
+                                    info = lookup_vendor_info(v_id_str, br_str, debug=False)
+                                    if info:
+                                        if 'code' in info and col_vcode in df.columns:
+                                            df.at[idx, col_vcode] = info['code']
+                                            updated_count += 1
+                                        if 'name' in info and col_vname in df.columns:
+                                            df.at[idx, col_vname] = info['name']
+                            
+                            # Update session state
+                            st.session_state.df_data = df
+                            st.session_state.data_version += 1 # Force editor refresh
+                            
+                            if updated_count > 0:
+                                st.success(f"✅ Updated Vendor Info for {updated_count} rows")
+                            else:
+                                st.info("ℹ️ No rows updated (Vendor ID not found or already up-to-date)")
+                            
+                            time.sleep(1)
+                            st.rerun()
+
                     else:
                         st.error(f"❌ ไม่สามารถโหลด Vendor Master ได้ - Path: {VENDOR_MASTER_PATH}")
 
@@ -3309,8 +3394,7 @@ def render_page_2():
                     col_vcode = find_column_name(df_cols, ["vendor", "code"]) or "Vendor code"
                     col_vname = find_column_name(df_cols, ["vendor", "name"]) or "Vendor Name"
                     
-                    def update_val(col_name, idx):
-                        input_key = f"det_{col_name}_{st.session_state.data_version}"
+                    def update_val(col_name, idx, input_key):
                         val = st.session_state[input_key]
                         
                         # Clean number format for InvAmtOCR columns (remove commas before saving)
@@ -3362,8 +3446,9 @@ def render_page_2():
                                 'row_idx': idx
                             }
                             
-                            # ค้นหาตำแหน่งใน PDF
-                            if os.path.splitext(pdf_path)[1].lower() == '.pdf':
+                            # ค้นหาตำแหน่งใน PDF หรือ Image
+                            ext = os.path.splitext(pdf_path)[1].lower()
+                            if ext in ['.pdf', '.png', '.jpg', '.jpeg']:
                                 positions = find_text_bbox_in_pdf(pdf_path, clean_value, page_num, field_name=col_name)
                                 st.session_state.pdf_highlight_positions = positions
                                 st.session_state.data_version += 1  # Force refresh
@@ -3466,8 +3551,8 @@ def render_page_2():
                                 col1, 
                                     value=field_value, 
                                     key=input_key,
-                                on_change=update_val,
-                                    args=(col1, current_idx),
+                                    on_change=update_val,
+                                    args=(col1, current_idx, input_key),
                                     label_visibility="visible"
                                 )
                             
@@ -3514,7 +3599,7 @@ def render_page_2():
                                         value=field_value2,
                                         key=input_key2,
                                     on_change=update_val,
-                                        args=(col2, current_idx),
+                                        args=(col2, current_idx, input_key2),
                                         label_visibility="visible"
                                     )
                                 

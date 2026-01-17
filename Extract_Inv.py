@@ -84,14 +84,42 @@ def detect_document_type(text, templates):
         return "invoice"  # default
     
     text_lower = text.lower()
+    
+    # Priority detection: Check specific document types first
+    # These have unique keywords that should take precedence
+    priority_types = ["cy_instruction"]
+    
+    for priority_type in priority_types:
+        template = templates.get("templates", {}).get(priority_type, {})
+        keywords = template.get("detect_keywords", [])
+        for keyword in keywords:
+            if keyword.lower() in text_lower:
+                return priority_type
+    
+    # Standard scoring with Header Prioritization
+    # Check first 15 lines (header) for document title keywords
+    lines = text.split('\n')
+    header_text = "\n".join(lines[:15]).lower()
+    
     scores = {}
     
     for doc_type, template in templates.get("templates", {}).items():
+        if doc_type in priority_types:
+            continue  # Already checked above
+        
         keywords = template.get("detect_keywords", [])
         score = 0
         for keyword in keywords:
-            if keyword.lower() in text_lower:
+            kw_low = keyword.lower()
+            
+            # Header match gets high score (prioritize document title)
+            if kw_low in header_text:
+                score += 10
+            
+            # Body match gets normal score
+            if kw_low in text_lower:
                 score += 1
+                
         if score > 0:
             scores[doc_type] = score
     
@@ -125,6 +153,12 @@ def extract_field_by_patterns(text, patterns, options=None):
                 value = re.sub(r'[\r\n]+', ' ', value)
                 value = re.sub(r'\s+', ' ', value).strip()
                 
+                # Check minimum digits requirement (for document_no validation)
+                if options.get("min_digits"):
+                    digit_count = len(re.sub(r'\D', '', value))
+                    if digit_count < options["min_digits"]:
+                        continue  # Skip to next pattern
+                
                 # Clean non-digits if specified
                 if options.get("clean_non_digits"):
                     value = re.sub(r'\D', '', value)
@@ -140,7 +174,7 @@ def extract_field_by_patterns(text, patterns, options=None):
     return ""
 
 
-def extract_common_fields(text, common_fields_config):
+def extract_common_fields(text, common_fields_config, doc_type_name=None):
     """Extract common fields (tax_id, branch) that apply to all document types"""
     result = {"tax_id": "", "branch": ""}
     
@@ -151,20 +185,38 @@ def extract_common_fields(text, common_fields_config):
     tax_config = common_fields_config.get("tax_id", {})
     tax_patterns = tax_config.get("patterns", [])
     
-    # First try to find 13-digit number directly
+    # Company Tax ID to skip (always extract vendor's Tax ID, not company's)
+    COMPANY_TAX_ID = "0105522018355"
+    
+    # Method 1: Find all 13-digit numbers directly
     all_tax_ids = re.findall(r"\b(\d{13})\b", text)
-    if all_tax_ids:
-        result["tax_id"] = all_tax_ids[0]
+    vendor_tax_ids = [tid for tid in all_tax_ids if tid != COMPANY_TAX_ID]
+    
+    if vendor_tax_ids:
+        result["tax_id"] = vendor_tax_ids[0]
     else:
-        # Try pattern with dashes
-        tax_pattern_match = re.search(r"\b\d{1}-\d{4}-\d{5}-\d{2}-\d{1}\b", text)
-        if tax_pattern_match:
-            result["tax_id"] = re.sub(r"\D", "", tax_pattern_match.group(0))
-        else:
-            # Try keyword-based extraction
+        # Method 2: Try pattern with dashes (e.g., 0-1234-56789-01-2)
+        all_dashed = re.findall(r"\b(\d{1}-\d{4}-\d{5}-\d{2}-\d{1})\b", text)
+        for match in all_dashed:
+            clean_id = re.sub(r"\D", "", match)
+            if clean_id != COMPANY_TAX_ID:
+                result["tax_id"] = clean_id
+                break
+        
+        # Method 3: Try pattern with spaces (e.g., 0 123456789012)
+        if not result["tax_id"]:
+            spaced_matches = re.findall(r"\b(\d{1}\s+\d{12})\b", text)
+            for match in spaced_matches:
+                clean_id = re.sub(r"\D", "", match)
+                if clean_id != COMPANY_TAX_ID:
+                    result["tax_id"] = clean_id
+                    break
+        
+        # Method 4: Keyword-based extraction
+        if not result["tax_id"]:
             for pattern in tax_patterns:
                 value = extract_field_by_patterns(text, [pattern], {"clean_non_digits": True, "length": 13})
-                if value and len(value) >= 10:
+                if value and len(value) >= 10 and value != COMPANY_TAX_ID:
                     result["tax_id"] = value
                     break
     
@@ -174,15 +226,15 @@ def extract_common_fields(text, common_fields_config):
     default_hq = branch_config.get("default_hq", "00000")
     pad_zeros = branch_config.get("pad_zeros", 5)
     
-    # Check for Head Office keywords first
-    ho_match = re.search(r"(?:สำนักงานใหญ่|สนญ\.?|Head\s*Office|H\.?O\.?)", text, re.IGNORECASE)
-    if ho_match:
-        result["branch"] = default_hq
+    # Try to find specific branch number FIRST (prioritize over Head Office)
+    branch_match = re.search(r"(?:สาขา(?:ที่)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})", text, re.IGNORECASE)
+    if branch_match:
+        result["branch"] = branch_match.group(1).zfill(pad_zeros)
     else:
-        # Try to find branch number
-        branch_match = re.search(r"(?:สาขา(?:ที่)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})", text, re.IGNORECASE)
-        if branch_match:
-            result["branch"] = branch_match.group(1).zfill(pad_zeros)
+        # Fall back to Head Office keywords
+        ho_match = re.search(r"(?:สำนักงานใหญ่|สนญ\.?|Head\s*Office|H\.?O\.?)", text, re.IGNORECASE)
+        if ho_match:
+            result["branch"] = default_hq
     
     return result
 
@@ -225,7 +277,7 @@ def parse_ocr_data_with_template(text, templates, doc_type="auto"):
     
     # Extract common fields (tax_id, branch) - always extracted for Vendor lookup
     common_fields = templates.get("common_fields", {})
-    common_result = extract_common_fields(text, common_fields)
+    common_result = extract_common_fields(text, common_fields, result["document_type_name"])
     result["tax_id"] = common_result["tax_id"]
     result["branch"] = common_result["branch"]
     
@@ -237,15 +289,31 @@ def parse_ocr_data_with_template(text, templates, doc_type="auto"):
         options = {
             "clean_html": field_config.get("clean_html", False),
             "clean_non_digits": field_config.get("clean_non_digits", False),
-            "length": field_config.get("length")
+            "length": field_config.get("length"),
+            "min_digits": field_config.get("min_digits")
         }
         
-        value = extract_field_by_patterns(text, patterns, options)
+        # Handle skip_lines: skip first N lines before searching
+        text_to_search = text
+        skip_lines = field_config.get("skip_lines", 0)
+        if skip_lines > 0:
+            lines = text.split('\n')
+            text_to_search = '\n'.join(lines[skip_lines:])
+        
+        value = extract_field_by_patterns(text_to_search, patterns, options)
         
         # Handle fallback for amount fields
         if not value and field_config.get("fallback") == "last_amount":
             amounts = re.findall(r"([\d,]+\.\d{2})", text)
             value = amounts[-1] if amounts else ""
+        
+        # Reject 13-digit numbers for document_no (these are Tax IDs, not document numbers)
+        if field_name == "document_no" and value:
+            # Remove non-alphanumeric for checking
+            digits_only = re.sub(r'\D', '', value)
+            if len(digits_only) == 13 and digits_only.isdigit():
+                # This is likely a Tax ID, not a document number
+                value = ""
         
         # Store in appropriate location
         if field_name in ["document_no", "date", "amount"]:
@@ -331,6 +399,9 @@ def load_vendor_master():
         
         def clean_branch(x):
             x = str(x).strip()
+            # Convert head office keywords to 00000
+            if x in ['สำนักงานใหญ่', 'สนญ', 'สนญ.', 'Head Office', 'H.O.', 'HO']:
+                return '00000'
             if x.isdigit():
                 return x.zfill(5)
             return x
@@ -390,7 +461,8 @@ def extract_text_from_image(file_path, api_key, pages_list):
         'repetition_penalty': '1.1'
     }
     
-    if pages_list:
+    is_pdf = file_path.lower().endswith('.pdf')
+    if pages_list and is_pdf:
         data['pages'] = json.dumps(pages_list)
     
     headers = {'Authorization': f'Bearer {api_key}'}
@@ -412,6 +484,9 @@ def extract_text_from_image(file_path, api_key, pages_list):
                         text = parsed.get('natural_text', content)
                     except json.JSONDecodeError:
                         text = content
+                    
+                    # Clean tags immediately
+                    text = clean_ocr_text(text)
                     extracted_texts.append(text)
             
             return '\n'.join(extracted_texts)
@@ -421,6 +496,18 @@ def extract_text_from_image(file_path, api_key, pages_list):
     except Exception as e:
         print(f"Error processing file: {e}")
         return None
+
+
+def clean_ocr_text(text):
+    """Clean OCR extracted text"""
+    if not text:
+        return ""
+    # Remove HTML tags including <?> and <table>
+    text = re.sub(r'<[^>]+>', ' ', text)
+    # Normalize whitespace
+    text = re.sub(r'[\r\n]+', '\n', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    return text.strip()
 
 
 # --- Main Logic ---
@@ -451,7 +538,7 @@ def main():
         print(f"Error: Source directory not found: {SOURCE_DIR}")
         return
 
-    files = [f for f in os.listdir(SOURCE_DIR) if f.lower().endswith(".pdf")]
+    files = [f for f in os.listdir(SOURCE_DIR) if f.lower().endswith(('.pdf', '.png', '.jpg', '.jpeg'))]
     
     if not files:
         print("No PDF files found.")
@@ -462,8 +549,12 @@ def main():
         print(f"\nProcessing: {filename}")
 
         try:
-            reader = PdfReader(file_path)
-            total_pages = len(reader.pages)
+            if filename.lower().endswith('.pdf'):
+                reader = PdfReader(file_path)
+                total_pages = len(reader.pages)
+            else:
+                total_pages = 1
+                
             target_pages = get_target_pages(PAGE_CONFIG, total_pages)
             print(f"   -> Total Pages: {total_pages}, Target: {target_pages}")
 
@@ -496,11 +587,36 @@ def main():
                         "Amount": parsed["amount"],
                     }
                     
-                    # Add extra fields from template
-                    for field_name, value in parsed.get("extra_fields", {}).items():
-                        # Convert field_name to readable label
-                        label = field_name.replace("_", " ").title()
-                        row_data[label] = value
+                    # Special handling for CY INSTRUCTION document type
+                    if parsed["document_type"] == "cy_instruction":
+                        extra = parsed.get("extra_fields", {})
+                        
+                        # Build CyBooking field: BOOKING_NO + MIXED LOAD + CONTACT + SHIP_AGENT
+                        cy_booking_parts = []
+                        booking_no = extra.get("cy_booking", "")
+                        if booking_no:
+                            cy_booking_parts.append(booking_no)
+                        mixed_load = extra.get("cy_mixed_load", "")
+                        if mixed_load:
+                            cy_booking_parts.append(mixed_load)
+                        ship_agent = extra.get("cy_ship_agent", "")
+                        if ship_agent:
+                            cy_booking_parts.append(f"CONTACT {ship_agent.strip()}")
+                        
+                        cy_booking = " ".join(cy_booking_parts)
+                        
+                        # Add CY-specific columns
+                        row_data["CyOrg"] = extra.get("cy_org", "")
+                        row_data["CyExporter"] = extra.get("cy_exporter", "")
+                        row_data["CyInvoiceNo"] = extra.get("cy_invoice_no", "")
+                        row_data["CyBooking"] = cy_booking
+                        row_data["CyQty"] = extra.get("cy_qty", "")
+                    else:
+                        # Add extra fields from template for other document types
+                        for field_name, value in parsed.get("extra_fields", {}).items():
+                            # Convert field_name to readable label
+                            label = field_name.replace("_", " ").title()
+                            row_data[label] = value
                     
                     data_rows.append(row_data)
                 else:
@@ -515,6 +631,18 @@ def main():
         
         if vendor_df is not None:
             print("\nMapping Vendor Code...")
+            # Helper to clean branch
+            def clean_branch_code(val):
+                s = str(val).strip()
+                if s.lower() in ['nan', 'none', '']:
+                    return "00000"
+                if s.isdigit():
+                    return s.zfill(5)
+                return s
+
+            if 'Branch_OCR' in df.columns:
+                df['Branch_OCR'] = df['Branch_OCR'].apply(clean_branch_code)
+
             df = pd.merge(
                 df, 
                 vendor_df, 
@@ -545,7 +673,32 @@ def main():
         
         try:
             with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Sheet1')
+                # First, save all data to a summary sheet
+                df.to_excel(writer, index=False, sheet_name='All Documents')
+                
+                # Then, group by Document Type and save each group to a separate sheet
+                if 'Document Type' in df.columns:
+                    grouped = df.groupby('Document Type', dropna=False)
+                    
+                    for doc_type, group_df in grouped:
+                        # Create sheet name from document type (max 31 chars for Excel)
+                        if pd.isna(doc_type) or str(doc_type).strip() == '':
+                            sheet_name = 'Unknown'
+                        else:
+                            # Clean sheet name: remove invalid characters and limit length
+                            sheet_name = str(doc_type).strip()
+                            # Excel sheet names cannot contain: \ / ? * [ ] :
+                            invalid_chars = ['\\', '/', '?', '*', '[', ']', ':']
+                            for char in invalid_chars:
+                                sheet_name = sheet_name.replace(char, '_')
+                            # Limit to 31 characters (Excel limitation)
+                            sheet_name = sheet_name[:31]
+                        
+                        # Reset index for clean output
+                        group_df = group_df.reset_index(drop=True)
+                        group_df.to_excel(writer, index=False, sheet_name=sheet_name)
+                        print(f"   -> Sheet '{sheet_name}': {len(group_df)} rows")
+                
             print(f"\nSuccess! Output saved at: {output_excel_path}")
             print(f"Total rows: {len(df)}")
         except Exception as e:

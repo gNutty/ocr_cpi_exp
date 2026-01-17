@@ -5,16 +5,35 @@
     "invoice": {
       "name": "ใบกำกับภาษี/Invoice",
       "name_en": "Tax Invoice",
-      "detect_keywords": ["ใบกำกับภาษี", "TAX INVOICE", "ใบแจ้งหนี้", "INVOICE"],
+      "detect_keywords": [
+        "ใบเสร็จรับเงิน / ใบกำกับภาษี",
+        "ใบเสร็จรับเงิน/ใบกำกับภาษี",
+        "ใบกำกับภาษี",
+        "TAX INVOICE",
+        "ใบแจ้งหนี้",
+        "INVOICE"
+      ],
       "fields": {
         "document_no": {
           "label": "Invoice No",
           "patterns": [
-            "เลขที่\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]{3,})",
-            "Invoice\\s*No\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]{3,})",
-            "No\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]{4,})"
+            "No\\.?\\s*[:\\.]?\\s*(LF-\\d+)",
+            "เลขที่\\s*/\\s*NO\\.?\\s*([A-Za-z]\\d{5,})",
+            "เลขที่\\s+([A-Za-z]\\d{6,})",
+            "เลขที่\\s*NO\\.?\\s*[/\\s]*(_?[A-Za-z]\\d{5,})",
+            "Tax\\s*Invoice\\s*No[\\s\\.:]*([A-Za-z0-9\\-\\/]*\\d+[A-Za-z0-9\\-\\/]*)",
+            "Tax\\s*Invoice\\s*No\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]*\\d+[A-Za-z0-9\\-\\/]*)",
+            "RECEIPT\\s*No\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]*\\d+[A-Za-z0-9\\-\\/]*)",
+            "เลขที่/NO\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]*\\d+[A-Za-z0-9\\-\\/]*)",
+            "เลขที่\\s*[:\\.]?\\s*(\\d{2}\\s*-\\s*\\d{6}\\s*-\\s*\\d{4})",
+            "No\\.?\\s*[:\\.]?\\s*([A-Z]+-[\\d]+)",
+            "Invoice\\s*No\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]*\\d+[A-Za-z0-9\\-\\/]*)",
+            "เลขที่\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]*\\d+[A-Za-z0-9\\-\\/]*)",
+            "No\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]*\\d[A-Za-z0-9\\-\\/]*)"
           ],
-          "required": true
+          "required": true,
+          "min_digits": 4,
+          "skip_lines": 3
         },
         "date": {
           "label": "Date",
@@ -73,7 +92,12 @@
     "receipt": {
       "name": "ใบเสร็จรับเงิน",
       "name_en": "Receipt",
-      "detect_keywords": ["ใบเสร็จรับเงิน", "RECEIPT", "ใบรับเงิน", "OFFICIAL RECEIPT"],
+      "detect_keywords": [
+        "ใบเสร็จรับเงิน",
+        "RECEIPT",
+        "ใบรับเงิน",
+        "OFFICIAL RECEIPT"
+      ],
       "fields": {
         "document_no": {
           "label": "Receipt No",
@@ -126,7 +150,12 @@
     "purchase_order": {
       "name": "ใบสั่งซื้อ",
       "name_en": "Purchase Order",
-      "detect_keywords": ["ใบสั่งซื้อ", "PURCHASE ORDER", "P/O", "PO NO"],
+      "detect_keywords": [
+        "ใบสั่งซื้อ",
+        "PURCHASE ORDER",
+        "P/O",
+        "PO NO"
+      ],
       "fields": {
         "document_no": {
           "label": "PO No",
@@ -189,7 +218,12 @@
     "delivery_note": {
       "name": "ใบส่งของ",
       "name_en": "Delivery Note",
-      "detect_keywords": ["ใบส่งของ", "DELIVERY NOTE", "ใบกำกับสินค้า", "D/N"],
+      "detect_keywords": [
+        "ใบส่งของ",
+        "DELIVERY NOTE",
+        "ใบกำกับสินค้า",
+        "D/N"
+      ],
       "fields": {
         "document_no": {
           "label": "DN No",
@@ -239,7 +273,11 @@
     "credit_note": {
       "name": "ใบลดหนี้",
       "name_en": "Credit Note",
-      "detect_keywords": ["ใบลดหนี้", "CREDIT NOTE", "C/N"],
+      "detect_keywords": [
+        "ใบลดหนี้",
+        "CREDIT NOTE",
+        "C/N"
+      ],
       "fields": {
         "document_no": {
           "label": "CN No",
@@ -291,7 +329,11 @@
     "debit_note": {
       "name": "ใบเพิ่มหนี้",
       "name_en": "Debit Note",
-      "detect_keywords": ["ใบเพิ่มหนี้", "DEBIT NOTE", "D/N"],
+      "detect_keywords": [
+        "ใบเพิ่มหนี้",
+        "DEBIT NOTE",
+        "D/N"
+      ],
       "fields": {
         "document_no": {
           "label": "DN No",
@@ -339,7 +381,11 @@
     "quotation": {
       "name": "ใบเสนอราคา",
       "name_en": "Quotation",
-      "detect_keywords": ["ใบเสนอราคา", "QUOTATION", "QUOTE"],
+      "detect_keywords": [
+        "ใบเสนอราคา",
+        "QUOTATION",
+        "QUOTE"
+      ],
       "fields": {
         "document_no": {
           "label": "Quotation No",
@@ -373,6 +419,110 @@
             "ใช้ได้ถึง\\s*[:\\.]?\\s*(\\d{1,2}[\\.\\/\\-]\\d{1,2}[\\.\\/\\-]\\d{2,4})",
             "Valid\\s*until\\s*[:\\.]?\\s*(\\d{1,2}[\\.\\/\\-]\\d{1,2}[\\.\\/\\-]\\d{2,4})",
             "ราคานี้ใช้ได้\\s*(\\d+)\\s*วัน"
+          ],
+          "required": false
+        }
+      }
+    },
+    "billing_note": {
+      "name": "ใบวางบิล",
+      "name_en": "Billing Note",
+      "detect_keywords": [
+        "ใบวางบิล",
+        "BILLING NOTE",
+        "BILLING"
+      ],
+      "fields": {
+        "document_no": {
+          "label": "Document No",
+          "patterns": [
+            "เลขที่\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]{3,})"
+          ],
+          "required": true
+        },
+        "date": {
+          "label": "Date",
+          "patterns": [
+            "วันที่\\s*[:\\.]?\\s*(\\d{1,2}[\\.\\/\\-]\\d{1,2}[\\.\\/\\-]\\d{2,4})"
+          ],
+          "required": true
+        },
+        "amount": {
+          "label": "Amount",
+          "patterns": [
+            "รวมเงิน\\s*[:\\.]?\\s*([\\d,]+\\.\\d{2})",
+            "จำนวนเงินสุทธิ\\s*[:\\.]?\\s*([\\d,]+\\.\\d{2})"
+          ],
+          "required": false
+        }
+      }
+    },
+    "cy_instruction": {
+      "name": "CY INSTRUCTION",
+      "name_en": "CY Instruction",
+      "detect_keywords": [
+        "CY INSTRUCTION",
+        "CONTAINER YARD INSTRUCTION",
+        "PLEASE ARRANGE TRANSPORTATION OF CONTAINER"
+      ],
+      "fields": {
+        "cy_org": {
+          "label": "CyOrg",
+          "patterns": [
+            "ORG\\s*[:\\.]?\\s*(\\d+)"
+          ],
+          "required": false
+        },
+        "cy_exporter": {
+          "label": "CyExporter",
+          "patterns": [
+            "<td>EXPORTER</td><td>([^<]+)</td>",
+            "EXPORTER\\s*</td><td>([^<]+)</td>",
+            "EXPORTER\\s+([A-Za-z0-9\\.\\,\\s]+(?:CO\\.?,?\\s*LTD\\.?|COMPANY|CORPORATION|INC\\.?))"
+          ],
+          "required": false,
+          "clean_html": true
+        },
+        "cy_invoice_no": {
+          "label": "CyInvoiceNo",
+          "patterns": [
+            "<td>INVOICE\\s*NO\\.?</td><td>([^<]+)</td>",
+            "INVOICE\\s*NO\\.?\\s*</td><td>([^<]+)</td>",
+            "INVOICE\\s*NO\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]+)"
+          ],
+          "required": false
+        },
+        "cy_booking": {
+          "label": "CyBooking",
+          "patterns": [
+            "<td>BOOKING\\s*NO\\.?</td><td>([^<]+)</td>",
+            "BOOKING\\s*NO\\.?\\s*</td><td>([^<]+)</td>",
+            "BOOKING\\s*NO\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\s]+)"
+          ],
+          "required": false
+        },
+        "cy_qty": {
+          "label": "CyQty",
+          "patterns": [
+            "<td>QUANTITY</td><td>([^<]+)</td>",
+            "QUANTITY\\s*</td><td>([^<]+)</td>",
+            "QUANTITY\\s*[:\\.]?\\s*([\\d\\.]+\\s*x\\s*[A-Za-z0-9\\s'\\(\\)]+)",
+            "([\\d\\.]+\\s*x\\s*DRY\\s*\\d+['\"]?\\s*\\([^\\)]+\\))"
+          ],
+          "required": false
+        },
+        "cy_ship_agent": {
+          "label": "CyShipAgent",
+          "patterns": [
+            "<td>SHIP\\s*AGENT</td><td>([^<]+)</td>",
+            "SHIP\\s*AGENT\\s*</td><td>([^<]+)</td>"
+          ],
+          "required": false
+        },
+        "cy_mixed_load": {
+          "label": "CyMixedLoad",
+          "patterns": [
+            "(MIXED\\s*LOAD)"
           ],
           "required": false
         }
@@ -413,6 +563,8 @@
       "label": "Tax ID",
       "label_th": "เลขประจำตัวผู้เสียภาษี",
       "patterns": [
+        "(\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d\\s+\\d)",
+        "\\b(\\d{1}\\s+\\d{12})\\b",
         "\\b(\\d{13})\\b",
         "\\b\\d{1}-\\d{4}-\\d{5}-\\d{2}-\\d{1}\\b",
         "(?:เลข(?:ที่)?(?:ประจำตัว)?ผู้เสียภาษี(?:อากร)?|Tax\\s*ID|Tax\\s*No\\.?)\\s*[:\\.]?\\s*([0-9\\-\\s]{10,25})"
@@ -425,8 +577,8 @@
       "label": "Branch",
       "label_th": "สาขา",
       "patterns": [
-        "(?:สำนักงานใหญ่|สนญ\\.?|Head\\s*Office|H\\.?O\\.?)",
-        "(?:สาขา(?:ที่)?|Branch(?:\\s*No\\.?)?)\\s*[:\\.]?\\s*(\\d{1,5})"
+        "(?:สาขา(?:ที่)?|Branch(?:\\s*No\\.?)?)\\s*[:\\.]?\\s*(\\d{1,5})",
+        "(?:สำนักงานใหญ่|สนญ\\.?|Head\\s*Office|H\\.?O\\.?)"
       ],
       "required": false,
       "default_hq": "00000",
