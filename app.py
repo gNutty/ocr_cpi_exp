@@ -3382,8 +3382,23 @@ def render_page_2():
                 
                 if st.session_state.selected_row_idx is not None:
                     current_idx = st.session_state.selected_row_idx
+                    
+                    # Bounds check to prevent IndexError
+                    if current_idx >= len(st.session_state.df_data) or current_idx < 0:
+                        st.session_state.selected_row_idx = None
+                        st.warning("⚠️ Selected row is out of range. Please select a valid row.")
+                        st.stop()
+                    
                     row_data = st.session_state.df_data.iloc[current_idx]
                     cols = [c for c in st.session_state.df_data.columns if c != "_chk"]
+                    
+                    # Get current document type to conditionally hide fields
+                    current_doc_type = str(row_data.get('Document Type', '')).strip().lower()
+                    
+                    # For CY INSTRUCTION, hide Vendor code and Vendor Name columns
+                    if 'cy' in current_doc_type or 'instruction' in current_doc_type:
+                        vendor_cols_to_hide = ['vendor code', 'vendor name', 'vendorid_ocr', 'branch_ocr']
+                        cols = [c for c in cols if c.lower() not in vendor_cols_to_hide]
                     
                     df_cols = st.session_state.df_data.columns
                     col_vid = find_column_name(df_cols, ["vendor", "id"]) or "VendorID_OCR"

@@ -165,10 +165,10 @@
         "cy_booking": {
           "label": "CyBooking",
           "patterns": [
-            "BOOKING\\s*NO\\.?\\s*[:\\.]?\\s*([A-Za-z]+\\s*[A-Za-z0-9]+)",
-            "BOOKING\\s*NO\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\s]+?)(?=\\s+(?:VOYAGE|ETA|VESSEL)|$)"
+            "BOOKING\\s*NO\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\s]+)"
           ],
           "required": false,
+          "extract_booking_pattern": true,
           "remove_spaces": true
         },
         "cy_qty": {

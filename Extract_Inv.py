@@ -150,6 +150,37 @@ def extract_field_by_patterns(text, patterns, options=None):
                 value = re.sub(r'[\r\n]+', ' ', value)
                 value = re.sub(r'\s+', ' ', value).strip()
                 
+                # Smart extraction for booking numbers: find pattern like "E BKG13808784"
+                # Extract only text that starts with letters and ends with digits
+                if options.get("extract_booking_pattern"):
+                    # Split into words and collect: letter-only words followed by alphanumeric ending in digit
+                    words = value.split()
+                    result_parts = []
+                    found_number = False
+                    
+                    for word in words:
+                        # Pure letters (like 'E' or 'BKG')
+                        if re.match(r'^[A-Za-z]+$', word):
+                            if not found_number:
+                                result_parts.append(word)
+                        # Alphanumeric ending with digits (like 'BKG13808784')
+                        elif re.match(r'^[A-Za-z]+\d+$', word):
+                            result_parts.append(word)
+                            found_number = True
+                            break  # Stop after finding the number part
+                        # Pure digits
+                        elif re.match(r'^\d+$', word):
+                            result_parts.append(word)
+                            found_number = True
+                            break
+                        else:
+                            # If we already started collecting and hit something else, stop
+                            if result_parts:
+                                break
+                    
+                    if result_parts:
+                        value = ' '.join(result_parts)
+                
                 # specific option to remove all spaces (e.g. for Booking No)
                 if options.get("remove_spaces"):
                     value = value.replace(" ", "")
@@ -291,7 +322,9 @@ def parse_ocr_data_with_template(text, templates, doc_type="auto"):
             "clean_html": field_config.get("clean_html", False),
             "clean_non_digits": field_config.get("clean_non_digits", False),
             "length": field_config.get("length"),
-            "min_digits": field_config.get("min_digits")
+            "min_digits": field_config.get("min_digits"),
+            "remove_spaces": field_config.get("remove_spaces", False),
+            "extract_booking_pattern": field_config.get("extract_booking_pattern", False)
         }
         
         # Handle skip_lines: skip first N lines before searching
@@ -676,6 +709,47 @@ def main():
         final_cols += [col for col in all_cols if col not in final_cols]
         
         df = df[final_cols]
+
+        # ============================================================
+        # CY Lookup: Forward-fill CY columns from CY INSTRUCTION to INVOICE
+        # For each Invoice row, copy CY values from the most recent 
+        # CY INSTRUCTION document that appeared before it (by page order)
+        # ============================================================
+        cy_columns = ['CyOrg', 'CyExporter', 'CyInvoiceNo', 'CyBooking', 'CyQty']
+        
+        # Ensure CY columns exist
+        for col in cy_columns:
+            if col not in df.columns:
+                df[col] = ""
+        
+        # Sort by Page to ensure correct order
+        if 'Page' in df.columns:
+            df = df.sort_values('Page', ascending=True).reset_index(drop=True)
+        
+        # Track last CY INSTRUCTION values
+        last_cy_values = {col: "" for col in cy_columns}
+        
+        # Iterate through rows and apply lookup
+        for idx, row in df.iterrows():
+            doc_type = str(row.get('Document Type', '')).strip().lower()
+            
+            # Check if this is a CY INSTRUCTION
+            if 'cy' in doc_type or 'instruction' in doc_type:
+                # Update tracked values from this CY INSTRUCTION
+                for col in cy_columns:
+                    if col in df.columns:
+                        val = row.get(col, "")
+                        if pd.notna(val) and str(val).strip():
+                            last_cy_values[col] = val
+            else:
+                # For other documents (Invoice, etc.), copy the tracked CY values
+                for col in cy_columns:
+                    current_val = row.get(col, "")
+                    # Only fill if the current value is empty
+                    if pd.isna(current_val) or str(current_val).strip() == "":
+                        df.at[idx, col] = last_cy_values[col]
+        
+        print(f"Applied CY lookup to {len(df)} rows")
 
         output_excel_path = os.path.join(OUTPUT_DIR, "summary_ocr.xlsx")
         
