@@ -79,55 +79,52 @@ def load_templates():
 
 
 def detect_document_type(text, templates):
-    """Auto-detect document type based on keywords in text"""
+    """Auto-detect document type based on keywords in text.
+    Only 3 document types are supported:
+    1. billing_note (ใบวางบิล)
+    2. cy_instruction (CY INSTRUCTION)
+    3. invoice (ใบกำกับภาษี/Invoice) - default for everything else
+    """
     if not text or not templates:
         return "invoice"  # default
     
     text_lower = text.lower()
     
-    # Priority detection: Check specific document types first
-    # These have unique keywords that should take precedence
-    priority_types = ["cy_instruction"]
-    
-    for priority_type in priority_types:
-        template = templates.get("templates", {}).get(priority_type, {})
-        keywords = template.get("detect_keywords", [])
-        for keyword in keywords:
-            if keyword.lower() in text_lower:
-                return priority_type
-    
-    # Standard scoring with Header Prioritization
     # Check first 15 lines (header) for document title keywords
     lines = text.split('\n')
     header_text = "\n".join(lines[:15]).lower()
     
-    scores = {}
+    # Strict Header: First 4 lines (Higher priority)
+    strict_header = "\n".join(lines[:4]).lower()
     
-    for doc_type, template in templates.get("templates", {}).items():
-        if doc_type in priority_types:
-            continue  # Already checked above
-        
-        keywords = template.get("detect_keywords", [])
-        score = 0
-        for keyword in keywords:
-            kw_low = keyword.lower()
-            
-            # Header match gets high score (prioritize document title)
-            if kw_low in header_text:
-                score += 10
-            
-            # Body match gets normal score
-            if kw_low in text_lower:
-                score += 1
-                
-        if score > 0:
-            scores[doc_type] = score
+    # Priority 1: Check for CY INSTRUCTION (unique keywords)
+    cy_template = templates.get("templates", {}).get("cy_instruction", {})
+    cy_keywords = cy_template.get("detect_keywords", [])
+    for keyword in cy_keywords:
+        if keyword.lower() in text_lower:
+            return "cy_instruction"
     
-    if scores:
-        # Return type with highest score
-        return max(scores, key=scores.get)
+    # Priority 2: Check for ใบวางบิล (Billing Note)
+    billing_template = templates.get("templates", {}).get("billing_note", {})
+    billing_keywords = billing_template.get("detect_keywords", [])
+    for keyword in billing_keywords:
+        kw_low = keyword.lower()
+        # Check in strict header first (top 4 lines)
+        if kw_low in strict_header:
+            return "billing_note"
+        # Then check in general header
+        if kw_low in header_text:
+            return "billing_note"
     
-    return "invoice"  # default fallback
+    # Priority 3: Check for Sahatthai Invoice (special case, maps to invoice)
+    sahatthai_template = templates.get("templates", {}).get("sahatthai_invoice", {})
+    sahatthai_keywords = sahatthai_template.get("detect_keywords", [])
+    for keyword in sahatthai_keywords:
+        if keyword.lower() in text_lower:
+            return "sahatthai_invoice"  # Will be displayed as Invoice
+    
+    # Default: Everything else is Invoice
+    return "invoice"
 
 
 def extract_field_by_patterns(text, patterns, options=None):
@@ -152,6 +149,10 @@ def extract_field_by_patterns(text, patterns, options=None):
                 # Clean whitespace
                 value = re.sub(r'[\r\n]+', ' ', value)
                 value = re.sub(r'\s+', ' ', value).strip()
+                
+                # specific option to remove all spaces (e.g. for Booking No)
+                if options.get("remove_spaces"):
+                    value = value.replace(" ", "")
                 
                 # Check minimum digits requirement (for document_no validation)
                 if options.get("min_digits"):
@@ -227,7 +228,7 @@ def extract_common_fields(text, common_fields_config, doc_type_name=None):
     pad_zeros = branch_config.get("pad_zeros", 5)
     
     # Try to find specific branch number FIRST (prioritize over Head Office)
-    branch_match = re.search(r"(?:สาขา(?:ที่)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})", text, re.IGNORECASE)
+    branch_match = re.search(r"(?:สาขา(?:ที่)?(?:ออกใบกำกับภาษี)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})(?!\d)", text, re.IGNORECASE)
     if branch_match:
         result["branch"] = branch_match.group(1).zfill(pad_zeros)
     else:
@@ -370,7 +371,7 @@ def parse_ocr_data_basic(text):
     if ho_match:
         result["branch"] = "00000"
     else:
-        branch_match = re.search(r"(?:สาขา(?:ที่)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})", text, re.IGNORECASE)
+        branch_match = re.search(r"(?:สาขา(?:ที่)?(?:ออกใบกำกับภาษี)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})(?!\d)", text, re.IGNORECASE)
         if branch_match:
             result["branch"] = branch_match.group(1).zfill(5)
     
@@ -629,6 +630,13 @@ def main():
     if data_rows:
         df = pd.DataFrame(data_rows)
         
+        # Remap "Sahatthai Invoice" to "ใบกำกับภาษี/Invoice" for Summary Excel
+        if 'Document Type' in df.columns:
+            df['Document Type'] = df['Document Type'].replace({
+                'Sahatthai Invoice': 'ใบกำกับภาษี/Invoice',
+                'sahatthai_invoice': 'ใบกำกับภาษี/Invoice'
+            })
+        
         if vendor_df is not None:
             print("\nMapping Vendor Code...")
             # Helper to clean branch
@@ -650,7 +658,7 @@ def main():
                 right_on=['เลขประจำตัวผู้เสียภาษี', 'สาขา'], 
                 how='left'
             )
-            df.rename(columns={'Vendor code SAP': 'Vendor code'}, inplace=True)
+            df.rename(columns={'Vendor code SAP': 'Vendor code', 'ชื่อบริษัท': 'Vendor Name'}, inplace=True)
             df.drop(columns=['เลขประจำตัวผู้เสียภาษี', 'สาขา'], inplace=True, errors='ignore')
         else:
             df['Vendor code'] = ""
@@ -658,7 +666,7 @@ def main():
         # Reorder columns - put important ones first
         priority_cols = [
             "Link PDF", "Page", "Document Type",
-            "VendorID_OCR", "Branch_OCR", "Vendor code", "ชื่อบริษัท",
+            "VendorID_OCR", "Branch_OCR", "Vendor code", "Vendor Name",
             "Document No", "Date", "Amount"
         ]
         
@@ -673,31 +681,78 @@ def main():
         
         try:
             with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
-                # First, save all data to a summary sheet
-                df.to_excel(writer, index=False, sheet_name='All Documents')
+                # Define sheet name mapping for document types
+                sheet_name_mapping = {
+                    'invoice': 'INVOICE',
+                    'ใบกำกับภาษี/Invoice': 'INVOICE',
+                    'Sahatthai Invoice': 'INVOICE',
+                    'sahatthai_invoice': 'INVOICE',
+                    'cy_instruction': 'CY_INSTRUCTION',
+                    'CY INSTRUCTION': 'CY_INSTRUCTION',
+                    'billing_note': 'ใบวางบิล',
+                    'ใบวางบิล/Billing Note': 'ใบวางบิล'
+                }
                 
-                # Then, group by Document Type and save each group to a separate sheet
+                # Map document types to sheet names
                 if 'Document Type' in df.columns:
-                    grouped = df.groupby('Document Type', dropna=False)
+                    df['_sheet_name'] = df['Document Type'].apply(
+                        lambda x: sheet_name_mapping.get(str(x).strip(), 'INVOICE') if pd.notna(x) else 'INVOICE'
+                    )
+                else:
+                    df['_sheet_name'] = 'INVOICE'
+                
+                # Define column configuration for each sheet
+                sheet_columns = {
+                    'INVOICE': [
+                        "Link PDF", "Page", "Document Type", 
+                        "VendorID_OCR", "Branch_OCR", "Vendor code", "Vendor Name", 
+                        "Document No", "Date", "Amount", 
+                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty"
+                    ],
+                    'CY_INSTRUCTION': [
+                        "Link PDF", "Page", "Document Type", 
+                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty"
+                    ],
+                    'ใบวางบิล': [
+                        "Link PDF", "Page", "Document Type", 
+                        "VendorID_OCR", "Branch_OCR", "Vendor code", "Vendor Name", 
+                        "Document No", "Date", "Amount"
+                    ]
+                }
+                
+                # Group by sheet name and save each group to a separate sheet
+                grouped = df.groupby('_sheet_name', dropna=False)
+                
+                for sheet_name, group_df in grouped:
+                    if pd.isna(sheet_name) or str(sheet_name).strip() == '':
+                        sheet_name = 'INVOICE'
                     
-                    for doc_type, group_df in grouped:
-                        # Create sheet name from document type (max 31 chars for Excel)
-                        if pd.isna(doc_type) or str(doc_type).strip() == '':
-                            sheet_name = 'Unknown'
-                        else:
-                            # Clean sheet name: remove invalid characters and limit length
-                            sheet_name = str(doc_type).strip()
-                            # Excel sheet names cannot contain: \ / ? * [ ] :
-                            invalid_chars = ['\\', '/', '?', '*', '[', ']', ':']
-                            for char in invalid_chars:
-                                sheet_name = sheet_name.replace(char, '_')
-                            # Limit to 31 characters (Excel limitation)
-                            sheet_name = sheet_name[:31]
-                        
-                        # Reset index for clean output
-                        group_df = group_df.reset_index(drop=True)
-                        group_df.to_excel(writer, index=False, sheet_name=sheet_name)
-                        print(f"   -> Sheet '{sheet_name}': {len(group_df)} rows")
+                    # Drop the temporary _sheet_name column
+                    group_df = group_df.drop(columns=['_sheet_name'], errors='ignore')
+                    
+                    # Select specific columns for this sheet
+                    target_cols = sheet_columns.get(str(sheet_name).strip(), sheet_columns['INVOICE'])
+                    
+                    # Filter existing columns only
+                    available_cols = [col for col in target_cols if col in group_df.columns]
+                    
+                    # Add missing columns as empty (optional, but good for consistency)
+                    for col in target_cols:
+                        if col not in available_cols:
+                            group_df[col] = ""
+                            available_cols.append(col)
+                    
+                    # Reorder columns matches the target list
+                    # Use a set for faster lookup to avoid duplicates if any
+                    final_cols = [col for col in target_cols if col in group_df.columns]
+                    
+                    # Final filtering and reordering
+                    group_df = group_df[final_cols]
+                    
+                    # Reset index for clean output
+                    group_df = group_df.reset_index(drop=True)
+                    group_df.to_excel(writer, index=False, sheet_name=str(sheet_name))
+                    print(f"   -> Sheet '{sheet_name}': {len(group_df)} rows")
                 
             print(f"\nSuccess! Output saved at: {output_excel_path}")
             print(f"Total rows: {len(df)}")

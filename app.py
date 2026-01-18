@@ -2409,14 +2409,9 @@ def render_page_1():
             st.markdown("### Document Type")
             doc_type_options = {
                 "auto": "🔍 Auto Detect",
-                "invoice": "📄 ใบกำกับภาษี/Invoice",
-                "receipt": "🧾 ใบเสร็จรับเงิน/Receipt",
-                "purchase_order": "📋 ใบสั่งซื้อ/PO",
-                "delivery_note": "📦 ใบส่งของ/DN",
-                "credit_note": "💳 ใบลดหนี้/CN",
-                "debit_note": "📝 ใบเพิ่มหนี้",
-                "quotation": "💼 ใบเสนอราคา",
-                "custom": "⚙️ อื่นๆ/Custom"
+                "billing_note": "📝 ใบวางบิล/Billing Note",
+                "cy_instruction": "📦 CY INSTRUCTION",
+                "invoice": "📄 ใบกำกับภาษี/Invoice"
             }
             
             current_doc_type_idx = list(doc_type_options.keys()).index(st.session_state.ocr_doc_type) if st.session_state.ocr_doc_type in doc_type_options else 0
@@ -2508,13 +2503,9 @@ def render_page_1():
             st.info("""
                 **ประเภทเอกสารที่รองรับ:**
                 
-                - 📄 **Invoice** - ใบกำกับภาษี
-                - 🧾 **Receipt** - ใบเสร็จรับเงิน
-                - 📋 **PO** - ใบสั่งซื้อ
-                - 📦 **DN** - ใบส่งของ
-                - 💳 **CN** - ใบลดหนี้
-                - 📝 **Debit Note** - ใบเพิ่มหนี้
-                - 💼 **Quotation** - ใบเสนอราคา
+                - 📝 **ใบวางบิล** - Billing Note
+                - 📦 **CY INSTRUCTION** - Container Yard Instruction
+                - 📄 **ใบกำกับภาษี/Invoice** - เอกสารอื่นๆ ที่ไม่ใช่ใบวางบิล/CY
                 
                 เลือก **Auto Detect** เพื่อให้ระบบตรวจจับประเภทอัตโนมัติ
                 หรือเลือกประเภทเฉพาะเพื่อใช้ regex patterns ที่เหมาะสม
@@ -2991,8 +2982,11 @@ def render_page_2():
                                         # Ensure columns exist
                                         if not find_column_name(df.columns, ["vendor", "code"]): 
                                             df["Vendor code"] = ""
-                                        # Only create Vendor Name if "ชื่อบริษัท" (Thai Name) or similar doesn't exist
-                                        if not find_column_name(df.columns, ["ชื่อบริษัท"]) and not find_column_name(df.columns, ["vendor", "name"]): 
+                                        # Rename ชื่อบริษัท to Vendor Name for consistency
+                                        if 'ชื่อบริษัท' in df.columns:
+                                            df.rename(columns={'ชื่อบริษัท': 'Vendor Name'}, inplace=True)
+                                        # Only create Vendor Name if it doesn't exist
+                                        if not find_column_name(df.columns, ["vendor", "name"]): 
                                             df["Vendor Name"] = ""
                                         
                                         # เก็บ path ของไฟล์ที่เปิด
@@ -3041,8 +3035,11 @@ def render_page_2():
                 # Ensure columns exist
                 if not find_column_name(df.columns, ["vendor", "code"]): 
                     df["Vendor code"] = ""
-                # Only create Vendor Name if "ชื่อบริษัท" or similar doesn't exist
-                if not find_column_name(df.columns, ["ชื่อบริษัท"]) and not find_column_name(df.columns, ["vendor", "name"]): 
+                # Rename ชื่อบริษัท to Vendor Name for consistency
+                if 'ชื่อบริษัท' in df.columns:
+                    df.rename(columns={'ชื่อบริษัท': 'Vendor Name'}, inplace=True)
+                # Only create Vendor Name if it doesn't exist
+                if not find_column_name(df.columns, ["vendor", "name"]): 
                     df["Vendor Name"] = ""
 
                 st.session_state.df_data = df
