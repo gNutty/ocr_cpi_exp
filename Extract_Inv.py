@@ -625,26 +625,28 @@ def main():
                     if parsed["document_type"] == "cy_instruction":
                         extra = parsed.get("extra_fields", {})
                         
-                        # Build CyBooking field: BOOKING_NO + MIXED LOAD + CONTACT + SHIP_AGENT
-                        cy_booking_parts = []
+                        # Build CyBooking field: Only booking number, no extra fields
                         booking_no = extra.get("cy_booking", "")
-                        if booking_no:
-                            cy_booking_parts.append(booking_no)
-                        mixed_load = extra.get("cy_mixed_load", "")
-                        if mixed_load:
-                            cy_booking_parts.append(mixed_load)
-                        ship_agent = extra.get("cy_ship_agent", "")
-                        if ship_agent:
-                            cy_booking_parts.append(f"CONTACT {ship_agent.strip()}")
-                        
-                        cy_booking = " ".join(cy_booking_parts)
+                        cy_booking = booking_no
                         
                         # Add CY-specific columns
                         row_data["CyOrg"] = extra.get("cy_org", "")
                         row_data["CyExporter"] = extra.get("cy_exporter", "")
                         row_data["CyInvoiceNo"] = extra.get("cy_invoice_no", "")
                         row_data["CyBooking"] = cy_booking
-                        row_data["CyQty"] = extra.get("cy_qty", "")
+                        cy_qty = extra.get("cy_qty", "")
+                        row_data["CyQty"] = cy_qty
+                        
+                        # Extract container count from CyQty
+                        containers = ""
+                        if cy_qty:
+                            qty_match = re.match(r'^([\d.]+)', cy_qty)
+                            if qty_match:
+                                try:
+                                    containers = str(int(float(qty_match.group(1))))
+                                except:
+                                    pass
+                        row_data["Containers"] = containers
                     else:
                         # Add extra fields from template for other document types
                         for field_name, value in parsed.get("extra_fields", {}).items():
@@ -715,7 +717,7 @@ def main():
         # For each Invoice row, copy CY values from the most recent 
         # CY INSTRUCTION document that appeared before it (by page order)
         # ============================================================
-        cy_columns = ['CyOrg', 'CyExporter', 'CyInvoiceNo', 'CyBooking', 'CyQty']
+        cy_columns = ['CyOrg', 'CyExporter', 'CyInvoiceNo', 'CyBooking', 'CyQty', 'Containers']
         
         # Ensure CY columns exist
         for col in cy_columns:
@@ -781,11 +783,11 @@ def main():
                         "Link PDF", "Page", "Document Type", 
                         "VendorID_OCR", "Branch_OCR", "Vendor code", "Vendor Name", 
                         "Document No", "Date", "Amount", 
-                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty"
+                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty", "Containers"
                     ],
                     'CY_INSTRUCTION': [
                         "Link PDF", "Page", "Document Type", 
-                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty"
+                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty", "Containers"
                     ],
                     'ใบวางบิล': [
                         "Link PDF", "Page", "Document Type", 

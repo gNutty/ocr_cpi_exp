@@ -111,7 +111,6 @@
         "description": {
           "label": "Description",
           "patterns": [
-            "<td>1</td><td>(.+?)</td>",
             "จำนวนเงิน\\s+1\\s+(.+?)(?=\\s+[\\d,]+\\.\\d{2})"
           ],
           "required": false,
@@ -146,8 +145,6 @@
         "cy_exporter": {
           "label": "CyExporter",
           "patterns": [
-            "<td>EXPORTER</td><td>([^<]+)</td>",
-            "EXPORTER\\s*</td><td>([^<]+)</td>",
             "EXPORTER\\s+([A-Za-z0-9\\.\\,\\s]+(?:CO\\.?,?\\s*LTD\\.?|COMPANY|CORPORATION|INC\\.?))"
           ],
           "required": false,
@@ -156,8 +153,6 @@
         "cy_invoice_no": {
           "label": "CyInvoiceNo",
           "patterns": [
-            "<td>INVOICE\\s*NO\\.?</td><td>([^<]+)</td>",
-            "INVOICE\\s*NO\\.?\\s*</td><td>([^<]+)</td>",
             "INVOICE\\s*NO\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\-\\/]+)"
           ],
           "required": false
@@ -165,7 +160,7 @@
         "cy_booking": {
           "label": "CyBooking",
           "patterns": [
-            "BOOKING\\s*NO\\.?\\s*[:\\.]?\\s*([A-Za-z0-9\\s]+)"
+            "BOOKING\\s*NO\\.?\\s*[:\\.]?\\s*([A-Z]\\s*[A-Z]{3}[0-9]+)"
           ],
           "required": false,
           "extract_booking_pattern": true,
@@ -182,10 +177,7 @@
         },
         "cy_ship_agent": {
           "label": "CyShipAgent",
-          "patterns": [
-            "<td>SHIP\\s*AGENT</td><td>([^<]+)</td>",
-            "SHIP\\s*AGENT\\s*</td><td>([^<]+)</td>"
-          ],
+          "patterns": [],
           "required": false
         },
         "cy_mixed_load": {

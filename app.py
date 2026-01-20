@@ -381,6 +381,8 @@ if 'ocr_page_start' not in st.session_state:
     st.session_state.ocr_page_start = 1  # Default start page
 if 'show_delete_confirm' not in st.session_state:
     st.session_state.show_delete_confirm = False
+if 'show_delete_source_confirm' not in st.session_state:
+    st.session_state.show_delete_source_confirm = False
 if 'show_settings' not in st.session_state:
     st.session_state.show_settings = False
 if 'ocr_type' not in st.session_state:
@@ -2599,7 +2601,7 @@ def render_page_1():
                 st.session_state.ocr_source_folder = None
         
         # Buttons row - ต้องอยู่ก่อน PDF uploader เพื่อให้เห็นปุ่ม
-        col_btn1, col_btn2, col_btn3 = st.columns([0.2, 0.2, 0.2])
+        col_btn1, col_btn2, col_btn3, col_btn4 = st.columns([0.2, 0.2, 0.2, 0.2])
         
         with col_btn1:
             if st.button("📁", use_container_width=True, type="primary", help="Browse Folder (may not work in some environments)", key="select_folder_btn"):
@@ -2700,7 +2702,19 @@ def render_page_1():
                         st.error(f"Error running OCR: {e}")
         
         with col_btn3:
-            if st.button("🔄", use_container_width=True, help="Refresh"):
+            if st.button("🗑️", use_container_width=True, help="Delete All Source Files", type="secondary", key="delete_source_btn"):
+                if st.session_state.ocr_source_folder and os.path.exists(st.session_state.ocr_source_folder):
+                    source_files = get_files_in_folder(st.session_state.ocr_source_folder)
+                    if source_files:
+                        st.session_state.show_delete_source_confirm = True
+                        st.rerun()
+                    else:
+                        st.info("No files found in source folder to delete")
+                else:
+                    st.warning("Source folder does not exist or not set")
+
+        with col_btn4:
+            if st.button("🔄", use_container_width=True, help="Refresh", key="refresh_source_btn"):
                 st.session_state.ocr_file_list_refresh += 1
                 st.rerun()
         
@@ -2806,6 +2820,43 @@ def render_page_1():
                 st.session_state.ocr_file_list_refresh += 1
                 st.rerun()
     
+    # Source Confirmation Dialog - on left side (half screen)
+    if st.session_state.show_delete_source_confirm:
+        st.markdown("---")
+        col_confirm_dialog, col_right_spacer = st.columns([0.5, 0.5])
+        
+        with col_confirm_dialog:
+            st.warning("⚠️ **Warning: You are about to delete ALL files in the SOURCE folder!**")
+            
+            col_confirm_cancel, col_confirm_ok = st.columns([0.5, 0.5])
+            with col_confirm_cancel:
+                if st.button("❌ Cancel", use_container_width=True, type="secondary", key="cancel_delete_source"):
+                    st.session_state.show_delete_source_confirm = False
+                    st.rerun()
+            with col_confirm_ok:
+                if st.button("✅ OK", use_container_width=True, type="primary", key="ok_delete_source"):
+                    st.session_state.show_delete_source_confirm = False
+                    if st.session_state.ocr_source_folder and os.path.exists(st.session_state.ocr_source_folder):
+                        source_files = get_files_in_folder(st.session_state.ocr_source_folder)
+                        if source_files:
+                            try:
+                                deleted_count = 0
+                                for file in source_files:
+                                    file_path = os.path.join(st.session_state.ocr_source_folder, file)
+                                    if os.path.isfile(file_path):
+                                        os.remove(file_path)
+                                        deleted_count += 1
+                                if deleted_count > 0:
+                                    st.success(f"✅ Deleted {deleted_count} file(s) from source folder")
+                                    st.session_state.ocr_file_list_refresh += 1
+                                    st.session_state.uploader_key += 1 # Reset uploader
+                                    st.rerun()
+                                else:
+                                    st.info("No files to delete")
+                            except Exception as e:
+                                st.error(f"Error deleting files: {e}")
+                                st.rerun()
+
     # Confirmation Dialog - on right side (half screen)
     if st.session_state.show_delete_confirm:
         st.markdown("---")

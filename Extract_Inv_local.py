@@ -629,26 +629,28 @@ def main():
                 if parsed["document_type"] == "cy_instruction":
                     extra = parsed.get("extra_fields", {})
                     
-                    # Build CyBooking field: BOOKING_NO + MIXED LOAD + CONTACT + SHIP_AGENT
-                    cy_booking_parts = []
+                    # Build CyBooking field: Only booking number, no extra fields
                     booking_no = extra.get("cy_booking", "")
-                    if booking_no:
-                        cy_booking_parts.append(booking_no)
-                    mixed_load = extra.get("cy_mixed_load", "")
-                    if mixed_load:
-                        cy_booking_parts.append(mixed_load)
-                    ship_agent = extra.get("cy_ship_agent", "")
-                    if ship_agent:
-                        cy_booking_parts.append(f"CONTACT {ship_agent.strip()}")
-                    
-                    cy_booking = " ".join(cy_booking_parts)
+                    cy_booking = booking_no
                     
                     # Add CY-specific columns
                     row_data["CyOrg"] = extra.get("cy_org", "")
                     row_data["CyExporter"] = extra.get("cy_exporter", "")
                     row_data["CyInvoiceNo"] = extra.get("cy_invoice_no", "")
                     row_data["CyBooking"] = cy_booking
-                    row_data["CyQty"] = extra.get("cy_qty", "")
+                    cy_qty = extra.get("cy_qty", "")
+                    row_data["CyQty"] = cy_qty
+                    
+                    # Extract container count from CyQty
+                    containers = ""
+                    if cy_qty:
+                        qty_match = re.match(r'^([\d.]+)', cy_qty)
+                        if qty_match:
+                            try:
+                                containers = str(int(float(qty_match.group(1))))
+                            except:
+                                pass
+                    row_data["Containers"] = containers
                 else:
                     # Add extra fields from template for other document types
                     for field_name, value in parsed.get("extra_fields", {}).items():
@@ -700,6 +702,43 @@ def main():
         final_cols += [col for col in all_cols if col not in final_cols]
         
         df = df[final_cols]
+
+        # ============================================================
+        # CY Lookup: Forward-fill CY columns from CY INSTRUCTION to INVOICE
+        # ============================================================
+        cy_columns = ['CyOrg', 'CyExporter', 'CyInvoiceNo', 'CyBooking', 'CyQty', 'Containers']
+        
+        # Ensure CY columns exist
+        for col in cy_columns:
+            if col not in df.columns:
+                df[col] = ""
+        
+        # Sort by Page to ensure correct order
+        if 'Page' in df.columns:
+            df = df.sort_values('Page', ascending=True).reset_index(drop=True)
+        
+        # Track last CY INSTRUCTION values
+        last_cy_values = {col: "" for col in cy_columns}
+        
+        # Iterate through rows and apply lookup
+        for idx, row in df.iterrows():
+            doc_type = str(row.get('Document Type', '')).strip().lower()
+            
+            # Check if this is a CY INSTRUCTION
+            if 'cy' in doc_type or 'instruction' in doc_type:
+                # Update tracked values from this CY INSTRUCTION
+                for col in cy_columns:
+                    if col in df.columns:
+                        val = row.get(col, "")
+                        if pd.notna(val) and str(val).strip():
+                            last_cy_values[col] = val
+            else:
+                # For other documents (Invoice, etc.), copy the tracked CY values
+                for col in cy_columns:
+                    current_val = row.get(col, "")
+                    # Only fill if the current value is empty
+                    if pd.isna(current_val) or str(current_val).strip() == "":
+                        df.at[idx, col] = last_cy_values[col]
 
         output_excel_path = os.path.join(OUTPUT_DIR, "summary_ocr.xlsx")
         
