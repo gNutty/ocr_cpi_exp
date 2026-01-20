@@ -787,7 +787,7 @@ def main():
                     ],
                     'CY_INSTRUCTION': [
                         "Link PDF", "Page", "Document Type", 
-                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty", "Containers"
+                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty", "Containers", "Container_delivery"
                     ],
                     'ใบวางบิล': [
                         "Link PDF", "Page", "Document Type", 
@@ -798,6 +798,35 @@ def main():
                 
                 # Group by sheet name and save each group to a separate sheet
                 grouped = df.groupby('_sheet_name', dropna=False)
+                
+                # ============================================================
+                # Calculate Container_delivery for CY_INSTRUCTION:
+                # Count INVOICE rows with matching CyInvoiceNo * 0.5
+                # ============================================================
+                invoice_df = grouped.get_group('INVOICE') if 'INVOICE' in [g[0] for g in grouped] else pd.DataFrame()
+                cy_df_temp = grouped.get_group('CY_INSTRUCTION') if 'CY_INSTRUCTION' in [g[0] for g in grouped] else None
+                
+                if cy_df_temp is not None and not invoice_df.empty and 'CyInvoiceNo' in invoice_df.columns:
+                    # Count invoices per CyInvoiceNo
+                    invoice_counts = invoice_df.groupby('CyInvoiceNo').size().to_dict()
+                    
+                    # Calculate Container_delivery for each CY row
+                    def calc_container_delivery(cy_invoice_no):
+                        if pd.isna(cy_invoice_no) or str(cy_invoice_no).strip() == '':
+                            return ''
+                        count = invoice_counts.get(str(cy_invoice_no).strip(), 0)
+                        if count > 0:
+                            return str(count * 0.5)
+                        return ''
+                    
+                    # Apply calculation to original df for CY_INSTRUCTION rows
+                    cy_mask = df['_sheet_name'] == 'CY_INSTRUCTION'
+                    if 'Container_delivery' not in df.columns:
+                        df['Container_delivery'] = ''
+                    df.loc[cy_mask, 'Container_delivery'] = df.loc[cy_mask, 'CyInvoiceNo'].apply(calc_container_delivery)
+                    
+                    # Re-group after adding Container_delivery
+                    grouped = df.groupby('_sheet_name', dropna=False)
                 
                 for sheet_name, group_df in grouped:
                     if pd.isna(sheet_name) or str(sheet_name).strip() == '':

@@ -744,7 +744,105 @@ def main():
         
         try:
             with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Sheet1')
+                # Define sheet name mapping for document types
+                sheet_name_mapping = {
+                    'invoice': 'INVOICE',
+                    'ใบกำกับภาษี/Invoice': 'INVOICE',
+                    'Sahatthai Invoice': 'INVOICE',
+                    'sahatthai_invoice': 'INVOICE',
+                    'cy_instruction': 'CY_INSTRUCTION',
+                    'CY INSTRUCTION': 'CY_INSTRUCTION',
+                    'billing_note': 'ใบวางบิล',
+                    'ใบวางบิล/Billing Note': 'ใบวางบิล'
+                }
+                
+                # Map document types to sheet names
+                if 'Document Type' in df.columns:
+                    df['_sheet_name'] = df['Document Type'].apply(
+                        lambda x: sheet_name_mapping.get(str(x).strip(), 'INVOICE') if pd.notna(x) else 'INVOICE'
+                    )
+                else:
+                    df['_sheet_name'] = 'INVOICE'
+                
+                # Define column configuration for each sheet
+                sheet_columns = {
+                    'INVOICE': [
+                        "Link PDF", "Page", "Document Type", 
+                        "VendorID_OCR", "Branch_OCR", "Vendor code", "ชื่อบริษัท", 
+                        "Document No", "Date", "Amount", 
+                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty", "Containers"
+                    ],
+                    'CY_INSTRUCTION': [
+                        "Link PDF", "Page", "Document Type", 
+                        "CyOrg", "CyExporter", "CyInvoiceNo", "CyBooking", "CyQty", "Containers", "Container_delivery"
+                    ],
+                    'ใบวางบิล': [
+                        "Link PDF", "Page", "Document Type", 
+                        "VendorID_OCR", "Branch_OCR", "Vendor code", "ชื่อบริษัท", 
+                        "Document No", "Date", "Amount"
+                    ]
+                }
+                
+                # Group by sheet name and save each group to a separate sheet
+                grouped = df.groupby('_sheet_name', dropna=False)
+                
+                # ============================================================
+                # Calculate Container_delivery for CY_INSTRUCTION:
+                # Count INVOICE rows with matching CyInvoiceNo * 0.5
+                # ============================================================
+                invoice_df = grouped.get_group('INVOICE') if 'INVOICE' in [g[0] for g in grouped] else pd.DataFrame()
+                cy_df_temp = grouped.get_group('CY_INSTRUCTION') if 'CY_INSTRUCTION' in [g[0] for g in grouped] else None
+                
+                if cy_df_temp is not None and not invoice_df.empty and 'CyInvoiceNo' in invoice_df.columns:
+                    # Count invoices per CyInvoiceNo
+                    invoice_counts = invoice_df.groupby('CyInvoiceNo').size().to_dict()
+                    
+                    # Calculate Container_delivery for each CY row
+                    def calc_container_delivery(cy_invoice_no):
+                        if pd.isna(cy_invoice_no) or str(cy_invoice_no).strip() == '':
+                            return ''
+                        count = invoice_counts.get(str(cy_invoice_no).strip(), 0)
+                        if count > 0:
+                            return str(count * 0.5)
+                        return ''
+                    
+                    # Apply calculation to original df for CY_INSTRUCTION rows
+                    cy_mask = df['_sheet_name'] == 'CY_INSTRUCTION'
+                    if 'Container_delivery' not in df.columns:
+                        df['Container_delivery'] = ''
+                    df.loc[cy_mask, 'Container_delivery'] = df.loc[cy_mask, 'CyInvoiceNo'].apply(calc_container_delivery)
+                    
+                    # Re-group after adding Container_delivery
+                    grouped = df.groupby('_sheet_name', dropna=False)
+                
+                for sheet_name, group_df in grouped:
+                    if pd.isna(sheet_name) or str(sheet_name).strip() == '':
+                        sheet_name = 'INVOICE'
+                    
+                    # Drop the temporary _sheet_name column
+                    group_df = group_df.drop(columns=['_sheet_name'], errors='ignore')
+                    
+                    # Select specific columns for this sheet
+                    target_cols = sheet_columns.get(str(sheet_name).strip(), sheet_columns['INVOICE'])
+                    
+                    # Filter existing columns only
+                    available_cols = [col for col in target_cols if col in group_df.columns]
+                    
+                    # Add missing columns as empty
+                    for col in target_cols:
+                        if col not in available_cols:
+                            group_df[col] = ""
+                            available_cols.append(col)
+                    
+                    # Reorder columns
+                    final_cols = [col for col in target_cols if col in group_df.columns]
+                    group_df = group_df[final_cols]
+                    
+                    # Reset index for clean output
+                    group_df = group_df.reset_index(drop=True)
+                    group_df.to_excel(writer, index=False, sheet_name=str(sheet_name))
+                    print(f"   -> Sheet '{sheet_name}': {len(group_df)} rows")
+                
             print(f"\nSuccess! Output saved at: {output_excel_path}")
             print(f"Total rows: {len(df)}")
         except Exception as e:

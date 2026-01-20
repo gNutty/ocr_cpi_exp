@@ -3141,6 +3141,8 @@ def render_page_2():
                     if not find_column_name(df.columns, ["ชื่อบริษัท"]) and not find_column_name(df.columns, ["vendor", "name"]): 
                         df["Vendor Name"] = ""
                     st.session_state.df_data = df
+                    st.session_state.selected_row_idx = None  # Reset selection when changing sheet
+                    st.session_state.view_mode = 'list'  # Reset to list view
                     st.session_state.data_version += 1  # Force refresh
                     st.rerun()
 
