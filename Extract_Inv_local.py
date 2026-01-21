@@ -221,52 +221,89 @@ def extract_common_fields(text, common_fields_config, doc_type_name=None):
     # Company Tax ID to skip (always extract vendor's Tax ID, not company's)
     COMPANY_TAX_ID = "0105522018355"
     
-    # Method 1: Find all 13-digit numbers directly
-    all_tax_ids = re.findall(r"\b(\d{13})\b", text)
-    vendor_tax_ids = [tid for tid in all_tax_ids if tid != COMPANY_TAX_ID]
+    # Special condition: if document contains "สยามคอนเทนเนอร์ เทอร์มินอล", use their Tax ID
+    SIAM_CONTAINER_TAX_ID = "0105531101901"
+    # Special condition: if document contains "สหไทย เทอร์มินอล", use their Tax ID
+    SAHATHAI_TAX_ID = "0107560000192"
+    # Special condition: if document contains "มนต์โลจิสติกส์ เซอร์วิส", use their Tax ID
+    MON_LOGISTICS_TAX_ID = "0105559135291"
     
-    if vendor_tax_ids:
-        result["tax_id"] = vendor_tax_ids[0]
+    if "สยามคอนเทนเนอร์ เทอร์มินอล" in text or "สยามคอนเทนเนอร์เทอร์มินอล" in text:
+        result["tax_id"] = SIAM_CONTAINER_TAX_ID
+    elif "สหไทย เทอร์มินอล" in text or "สหไทยเทอร์มินอล" in text:
+        result["tax_id"] = SAHATHAI_TAX_ID
+    elif "มนต์โลจิสติกส์ เซอร์วิส" in text or "มนต์โลจิสติกส์เซอร์วิส" in text:
+        result["tax_id"] = MON_LOGISTICS_TAX_ID
     else:
-        # Method 2: Try pattern with dashes (e.g., 0-1234-56789-01-2)
-        all_dashed = re.findall(r"\b(\d{1}-\d{4}-\d{5}-\d{2}-\d{1})\b", text)
-        for match in all_dashed:
-            clean_id = re.sub(r"\D", "", match)
-            if clean_id != COMPANY_TAX_ID:
-                result["tax_id"] = clean_id
-                break
+        # Method 1: Find all 13-digit numbers directly
+        all_tax_ids = re.findall(r"\b(\d{13})\b", text)
+        vendor_tax_ids = [tid for tid in all_tax_ids if tid != COMPANY_TAX_ID]
         
-        # Method 3: Try pattern with spaces (e.g., 0 123456789012)
-        if not result["tax_id"]:
-            spaced_matches = re.findall(r"\b(\d{1}\s+\d{12})\b", text)
-            for match in spaced_matches:
+        if vendor_tax_ids:
+            result["tax_id"] = vendor_tax_ids[0]
+        else:
+            # Method 2: Try pattern with dashes (e.g., 0-1234-56789-01-2)
+            all_dashed = re.findall(r"\b(\d{1}-\d{4}-\d{5}-\d{2}-\d{1})\b", text)
+            for match in all_dashed:
                 clean_id = re.sub(r"\D", "", match)
                 if clean_id != COMPANY_TAX_ID:
                     result["tax_id"] = clean_id
                     break
-        
-        # Method 4: Keyword-based extraction
-        if not result["tax_id"]:
-            for pattern in tax_patterns:
-                value = extract_field_by_patterns(text, [pattern], {"clean_non_digits": True, "length": 13})
-                if value and len(value) >= 10 and value != COMPANY_TAX_ID:
-                    result["tax_id"] = value
-                    break
+            
+            # Method 3: Try pattern with spaces (e.g., 0 123456789012)
+            if not result["tax_id"]:
+                spaced_matches = re.findall(r"\b(\d{1}\s+\d{12})\b", text)
+                for match in spaced_matches:
+                    clean_id = re.sub(r"\D", "", match)
+                    if clean_id != COMPANY_TAX_ID:
+                        result["tax_id"] = clean_id
+                        break
+            
+            # Method 4: Keyword-based extraction
+            if not result["tax_id"]:
+                for pattern in tax_patterns:
+                    value = extract_field_by_patterns(text, [pattern], {"clean_non_digits": True, "length": 13})
+                    if value and len(value) >= 10 and value != COMPANY_TAX_ID:
+                        result["tax_id"] = value
+                        break
     
     # Extract Branch
     branch_config = common_fields_config.get("branch", {})
     default_hq = branch_config.get("default_hq", "00000")
     pad_zeros = branch_config.get("pad_zeros", 5)
     
-    # Try to find specific branch number FIRST (prioritize over Head Office)
-    branch_match = re.search(r"(?:สาขา(?:ที่)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})", text, re.IGNORECASE)
-    if branch_match:
-        result["branch"] = branch_match.group(1).zfill(pad_zeros)
+    # Priority 1: Look for checked checkbox with branch (☑ สาขาที่ X)
+    checked_branch_match = re.search(r'[☑✓✔]\s*สาขา(?:ที่)?\s*(\d+)', text)
+    if checked_branch_match:
+        result["branch"] = checked_branch_match.group(1).zfill(pad_zeros)
     else:
-        # Fall back to Head Office keywords
-        ho_match = re.search(r"(?:สำนักงานใหญ่|สนญ\.?|Head\s*Office|H\.?O\.?)", text, re.IGNORECASE)
-        if ho_match:
+        # Priority 2: Look for checked Head Office checkbox
+        checked_hq_match = re.search(r'[☑✓✔]\s*(?:สำนักงานใหญ่|สนญ\.?|Head\s*Office)', text, re.IGNORECASE)
+        if checked_hq_match:
             result["branch"] = default_hq
+        else:
+            # Priority 3: Look for "สาขาที่ออกใบกำกับภาษี คือ XXXXX" pattern (vendor's branch)
+            vendor_branch_match = re.search(r'สาขาที่ออกใบกำกับภาษี\s*(?:คือ|:)?\s*(\d{1,5})', text, re.IGNORECASE)
+            if vendor_branch_match:
+                result["branch"] = vendor_branch_match.group(1).zfill(pad_zeros)
+            else:
+                # Priority 4: Look for "สำนักงานใหญ่ XXXXX" or "HEAD OFFICE XXXXX" (head office with number)
+                hq_with_num_match = re.search(r'(?:สำนักงานใหญ่|HEAD\s*OFFICE)\s*[:\s]?\s*(\d{5})', text, re.IGNORECASE)
+                if hq_with_num_match:
+                    result["branch"] = hq_with_num_match.group(1).zfill(pad_zeros)
+                else:
+                    # Priority 5: Standard branch pattern (without checkbox context)
+                    branch_match = re.search(r"(?:สาขา(?:ที่)?|Branch(?:\s*No\.?)?)\s*[:\.]?\s*(\d{1,5})(?!\d)", text, re.IGNORECASE)
+                    if branch_match:
+                        result["branch"] = branch_match.group(1).zfill(pad_zeros)
+                    else:
+                        # Priority 6: Fall back to Head Office keywords (without number)
+                        ho_match = re.search(r"(?:สำนักงานใหญ่|สนญ\.?|Head\s*Office|H\.?O\.?)", text, re.IGNORECASE)
+                        if ho_match:
+                            result["branch"] = default_hq
+                        else:
+                            # Default to Head Office if nothing found
+                            result["branch"] = default_hq
     
     return result
 
@@ -346,6 +383,23 @@ def parse_ocr_data_with_template(text, templates, doc_type="auto"):
             if len(digits_only) == 13 and digits_only.isdigit():
                 # This is likely a Tax ID, not a document number
                 value = ""
+        
+        # Fallback for date: search for common date formats if not found
+        if field_name == "date" and not value:
+            # Search for date patterns: xx/xx/xxxx, xx-xx-xxxx, xx.xx.xxxx, xx/xx/xx, xx-xx-xx
+            date_patterns = [
+                r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',  # dd/mm/yyyy or dd-mm-yyyy
+                r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2})'   # dd/mm/yy or dd-mm-yy
+            ]
+            for date_pattern in date_patterns:
+                date_matches = re.findall(date_pattern, text)
+                if date_matches:
+                    value = date_matches[0]
+                    break
+        
+        # Normalize date format: convert dashes/dots to slashes
+        if field_name == "date" and value:
+            value = re.sub(r'[-.]', '/', value)
         
         # Store in appropriate location
         if field_name in ["document_no", "date", "amount"]:
