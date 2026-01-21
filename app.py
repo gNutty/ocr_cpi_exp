@@ -855,7 +855,7 @@ def save_txt_local(df, default_name, start_path, delimiter='\t'):
     # 2) บันทึก DataFrame เป็นไฟล์ .txt
     try:
         # ใช้ delimiter ที่กำหนด (default: tab)
-        df.to_csv(file_path, sep=delimiter, index=False, header=False, encoding='utf-8')
+        df.to_csv(file_path, sep=delimiter, index=False, header=False, encoding='cp874')
         return True, file_path
     except Exception as e:
         return False, f"Error saving text file: {e}"
@@ -2250,10 +2250,10 @@ def generate_sap_data(df_source):
     try:
         # Rules (Shortened)
         column_rules = [
-            ["Running", ""], ["Fix", "1001"], ["Col", "InvDateOCR"], ["Fix", "KR"],
-            ["Fix", "Now Date"], ["Fix", "THB"], ["Col", "InvNoOCR"], ["Fix", "ค่าผ่านท่า"],
-            ["Fix", "0000"], ["Fix", "31"], ["Col", "Vendor Match"], ["Col", "InvAmtOCR"],
-            ["Fix", "V7"], ["Fix", "X"], ["Fix", "0110"], ["Col", "CyOrg"],
+            ["Running", ""], ["Fix", "1001"], ["Col", "Date"], ["Fix", "KR"],
+            ["Fix", "Now Date"], ["Fix", "THB"], ["Col", "Document No"], ["Fix", "ค่าผ่านท่า"],
+            ["Fix", "0"], ["Fix", "31"], ["Col", "Vendor code"], ["Col", "Amount"],
+            ["Fix", "V7"], ["Fix", "X"], ["Fix", "110"], ["Col", "CyOrg"],
             ["Col", "CyInvoiceNo"], ["Fix", "ค่าผ่านท่า"], ["Fix", "6450200"],
         ]
         new_data = {}
@@ -2272,11 +2272,12 @@ def generate_sap_data(df_source):
                         matched_col = find_column_name(df_source.columns, ["vendor", "code"]) or rule_value
                 
                 if matched_col in df_source.columns:
-                    if rule_value == "InvDateOCR":
+                    if rule_value in ["InvDateOCR", "Date"]:
                         dates = pd.to_datetime(df_source[matched_col], errors='coerce')
                         new_data[col_name] = dates.dt.strftime('%d%m%Y').fillna('')
                     else: 
                         new_data[col_name] = df_source[matched_col].tolist()
+
                 else: 
                     new_data[col_name] = [""] * row_count
             elif rule_type == "Running": 
